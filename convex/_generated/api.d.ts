@@ -11,6 +11,7 @@
 import type * as auth from "../auth.js";
 import type * as builders from "../builders.js";
 import type * as jobs from "../jobs.js";
+import type * as testing from "../testing.js";
 import type * as workerInvites from "../workerInvites.js";
 import type * as workers from "../workers.js";
 
@@ -24,6 +25,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   builders: typeof builders;
   jobs: typeof jobs;
+  testing: typeof testing;
   workerInvites: typeof workerInvites;
   workers: typeof workers;
 }>;
