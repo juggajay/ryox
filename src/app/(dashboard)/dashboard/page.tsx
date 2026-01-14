@@ -65,7 +65,7 @@ function OwnerDashboard() {
     user ? { userId: user._id, daysAhead: 30 } : "skip"
   );
 
-  const activeJobs = jobs?.filter((j) => j.status === "active") || [];
+  const activeJobs = jobs?.filter((j) => j?.status === "active") || [];
   const pendingTimesheets =
     jobs?.reduce((sum, j) => sum + (j.stats.pendingTimesheets || 0), 0) || 0;
   const activeWorkers = workers?.filter((w) => w.status === "active") || [];
@@ -284,7 +284,7 @@ function WorkerDashboard() {
     user ? { userId: user._id } : "skip"
   );
 
-  const activeJobs = jobs?.filter((j) => j.status === "active") || [];
+  const activeJobs = jobs?.filter((j) => j?.status === "active") || [];
 
   return (
     <div>
