@@ -19,12 +19,23 @@ export const seedTestOrganization = mutation({
       .first();
 
     if (existingOrg) {
-      // Return existing data
+      // Return existing data, but ensure password is correct
       const existingUser = await ctx.db
         .query("users")
         .withIndex("by_organization", (q) => q.eq("organizationId", existingOrg._id))
         .filter((q) => q.eq(q.field("email"), args.ownerEmail.toLowerCase()))
         .first();
+
+      // Update password hash if user exists
+      if (existingUser) {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(args.ownerPassword);
+        const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const passwordHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+        await ctx.db.patch(existingUser._id, { passwordHash });
+      }
+
       return {
         organizationId: existingOrg._id,
         userId: existingUser?._id,
@@ -134,6 +145,17 @@ export const seedTestWorker = mutation({
         .query("users")
         .filter((q) => q.eq(q.field("workerId"), existingWorker._id))
         .first();
+
+      // Update password hash if user exists
+      if (existingUser) {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(args.password);
+        const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const passwordHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+        await ctx.db.patch(existingUser._id, { passwordHash });
+      }
+
       return { workerId: existingWorker._id, userId: existingUser?._id };
     }
 

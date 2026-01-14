@@ -21,20 +21,22 @@ export class BuildersPage {
   constructor(page: Page) {
     this.page = page;
     this.heading = page.getByRole('heading', { name: 'Builders' });
-    this.addBuilderButton = page.getByRole('button', { name: /Add Builder|New Builder/i });
+    // Use first() since there may be multiple buttons (header + empty state)
+    this.addBuilderButton = page.getByRole('button', { name: /Add Builder|New Builder/i }).first();
     this.buildersList = page.locator('[data-testid="builders-list"]');
 
-    // Modal
-    this.modal = page.locator('[role="dialog"]');
-    this.companyNameInput = page.getByLabel(/Company Name/i);
-    this.abnInput = page.getByLabel(/ABN/i);
-    this.paymentTermsInput = page.getByLabel(/Payment Terms/i);
-    this.contactNameInput = page.getByLabel(/Contact Name/i);
-    this.contactEmailInput = page.getByLabel(/Contact Email/i);
-    this.contactPhoneInput = page.getByLabel(/Contact Phone/i);
-    this.contactRoleInput = page.getByLabel(/Role/i);
-    this.submitButton = this.modal.getByRole('button', { name: /Add|Create|Save/i });
-    this.cancelButton = this.modal.getByRole('button', { name: /Cancel/i });
+    // Modal - find by heading since there's no role="dialog"
+    this.modal = page.locator('div').filter({ has: page.getByRole('heading', { name: 'Add Builder', level: 2 }) });
+    this.companyNameInput = page.getByPlaceholder('ABC Builders Pty Ltd');
+    this.abnInput = page.getByPlaceholder('12 345 678 901');
+    this.paymentTermsInput = page.locator('select').first(); // Payment terms is a select
+    this.contactNameInput = page.getByPlaceholder('John Doe');
+    this.contactEmailInput = page.getByPlaceholder('john@builder.com');
+    this.contactPhoneInput = page.getByPlaceholder('0400 123 456');
+    this.contactRoleInput = page.getByPlaceholder('Project Manager');
+    // The submit button in the modal has the same text as the page button, use last()
+    this.submitButton = page.getByRole('button', { name: 'Add Builder' }).last();
+    this.cancelButton = page.getByRole('button', { name: /Cancel|Close/i });
   }
 
   async goto() {
@@ -47,7 +49,8 @@ export class BuildersPage {
 
   async openAddBuilderModal() {
     await this.addBuilderButton.click();
-    await expect(this.modal).toBeVisible();
+    // Wait for modal heading to appear
+    await expect(this.page.getByRole('heading', { name: 'Add Builder', level: 2 })).toBeVisible();
   }
 
   async expectBuilderInList(companyName: string) {

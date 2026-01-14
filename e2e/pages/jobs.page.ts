@@ -22,21 +22,22 @@ export class JobsPage {
   constructor(page: Page) {
     this.page = page;
     this.heading = page.getByRole('heading', { name: 'Jobs' });
-    this.createJobButton = page.getByRole('button', { name: /Create Job|New Job/i });
+    // Use first() since there may be multiple buttons (header + empty state)
+    this.createJobButton = page.getByRole('button', { name: /Create Job|New Job/i }).first();
     this.jobsList = page.locator('[data-testid="jobs-list"]');
     this.statusFilter = page.getByRole('combobox', { name: /status/i });
     this.builderFilter = page.getByRole('combobox', { name: /builder/i });
 
-    // Modal elements
-    this.modal = page.locator('[role="dialog"]');
-    this.jobNameInput = page.getByLabel(/Job Name/i);
-    this.builderSelect = page.getByLabel(/Builder|Client/i);
-    this.siteAddressInput = page.getByLabel(/Site Address/i);
-    this.jobTypeSelect = page.getByLabel(/Job Type/i);
-    this.quotedPriceInput = page.getByLabel(/Quoted Price/i);
-    this.startDateInput = page.getByLabel(/Start Date/i);
-    this.submitButton = this.modal.getByRole('button', { name: /Create|Save/i });
-    this.cancelButton = this.modal.getByRole('button', { name: /Cancel/i });
+    // Modal - find by heading since there's no role="dialog"
+    this.modal = page.locator('div').filter({ has: page.getByRole('heading', { name: /Create Job|New Job/i, level: 2 }) });
+    this.jobNameInput = page.getByPlaceholder(/Job name|Kitchen Renovation/i);
+    this.builderSelect = page.locator('select').first();
+    this.siteAddressInput = page.getByPlaceholder(/address|123 Main St/i);
+    this.jobTypeSelect = page.locator('select').nth(1);
+    this.quotedPriceInput = page.locator('input[type="number"]').first();
+    this.startDateInput = page.locator('input[type="date"]').first();
+    this.submitButton = page.getByRole('button', { name: /Create Job|Save/i });
+    this.cancelButton = page.getByRole('button', { name: /Cancel/i });
   }
 
   async goto() {
@@ -49,7 +50,8 @@ export class JobsPage {
 
   async openCreateJobModal() {
     await this.createJobButton.click();
-    await expect(this.modal).toBeVisible();
+    // Wait for modal heading to appear
+    await expect(this.page.getByRole('heading', { name: /Create Job|New Job/i, level: 2 })).toBeVisible();
   }
 
   async expectJobInList(jobName: string) {

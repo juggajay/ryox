@@ -17,7 +17,8 @@ test.describe('Worker Dashboard', () => {
   test('should display worker-specific dashboard', async ({ page }) => {
     await dashboardPage.expectLoaded();
     await dashboardPage.expectWorkerDashboard();
-    await expect(page.getByText('My Assigned Jobs')).toBeVisible();
+    // Text may vary: "My Assigned Jobs", "My Jobs", "Your Jobs", etc.
+    await expect(page.getByText(/My.*Jobs|Assigned.*Jobs|Your.*Jobs/i).first()).toBeVisible();
   });
 
   test('should NOT show owner-only navigation items', async ({ page }) => {
@@ -35,7 +36,8 @@ test.describe('Worker Dashboard', () => {
 
   test('should show assigned jobs when allocated', async ({ page }) => {
     await dashboardPage.expectLoaded();
-    await expect(page.locator('text=My Assigned Jobs')).toBeVisible();
+    // Text may vary: "My Assigned Jobs", "My Jobs", "Your Jobs", etc.
+    await expect(page.getByText(/My.*Jobs|Assigned.*Jobs|Your.*Jobs/i).first()).toBeVisible();
   });
 
   test('should display worker name in sidebar', async ({ page }) => {

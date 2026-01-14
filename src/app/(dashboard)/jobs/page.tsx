@@ -302,14 +302,14 @@ const statusLabels: Record<string, string> = {
 export default function JobsPage() {
   const { user } = useAuth();
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"pending" | "active" | "onHold" | "completed" | "invoiced" | null>(null);
 
   const jobs = useQuery(
     api.jobs.list,
     user
       ? {
           userId: user._id,
-          status: statusFilter as any,
+          status: statusFilter ?? undefined,
         }
       : "skip"
   );
@@ -346,7 +346,7 @@ export default function JobsPage() {
         >
           All
         </button>
-        {Object.entries(statusLabels).map(([key, label]) => (
+        {(Object.entries(statusLabels) as [typeof statusFilter, string][]).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setStatusFilter(key)}

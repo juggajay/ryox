@@ -10,10 +10,11 @@ export class SignInPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.emailInput = page.getByPlaceholder('you@company.com');
-    this.passwordInput = page.getByPlaceholder('Enter your password');
+    this.emailInput = page.getByPlaceholder('you@example.com');
+    this.passwordInput = page.getByPlaceholder('••••••••');
     this.signInButton = page.getByRole('button', { name: 'Sign In' });
-    this.errorMessage = page.locator('[class*="text-red"]');
+    // Error messages are displayed as text containing the error
+    this.errorMessage = page.locator('div').filter({ hasText: /Error|Invalid|required/i });
     this.logo = page.locator('img[alt*="Ryox"]');
   }
 

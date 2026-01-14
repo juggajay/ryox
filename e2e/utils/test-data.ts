@@ -1,8 +1,18 @@
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+
+// Load environment variables from .env.local
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+
 import { ConvexHttpClient } from 'convex/browser';
 import { api } from '../../convex/_generated/api';
 import { TEST_OWNER, TEST_WORKER, TEST_BUILDER, TEST_JOB } from './auth-helpers';
 
-const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+if (!convexUrl) {
+  throw new Error('NEXT_PUBLIC_CONVEX_URL environment variable is not set. Check .env.local file.');
+}
+const convex = new ConvexHttpClient(convexUrl);
 
 export interface TestDataIds {
   organizationId: string;

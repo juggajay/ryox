@@ -10,8 +10,16 @@
 
 import type * as auth from "../auth.js";
 import type * as builders from "../builders.js";
+import type * as chat from "../chat.js";
+import type * as expenses from "../expenses.js";
+import type * as invoices from "../invoices.js";
 import type * as jobs from "../jobs.js";
+import type * as knowledge from "../knowledge.js";
+import type * as organizations from "../organizations.js";
+import type * as overheads from "../overheads.js";
+import type * as reports from "../reports.js";
 import type * as testing from "../testing.js";
+import type * as timesheets from "../timesheets.js";
 import type * as workerInvites from "../workerInvites.js";
 import type * as workers from "../workers.js";
 
@@ -24,8 +32,16 @@ import type {
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   builders: typeof builders;
+  chat: typeof chat;
+  expenses: typeof expenses;
+  invoices: typeof invoices;
   jobs: typeof jobs;
+  knowledge: typeof knowledge;
+  organizations: typeof organizations;
+  overheads: typeof overheads;
+  reports: typeof reports;
   testing: typeof testing;
+  timesheets: typeof timesheets;
   workerInvites: typeof workerInvites;
   workers: typeof workers;
 }>;

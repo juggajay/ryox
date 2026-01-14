@@ -193,6 +193,7 @@ export default defineSchema({
       v.literal("queried"),
       v.literal("invoiced")
     ),
+    queryNote: v.optional(v.string()), // Note when owner queries a timesheet
     submittedAt: v.number(),
     approvedAt: v.optional(v.number()),
     approvedBy: v.optional(v.id("users")),

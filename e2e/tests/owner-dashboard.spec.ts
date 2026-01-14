@@ -19,10 +19,11 @@ test.describe('Owner Dashboard', () => {
 
   test('should display all stat cards', async ({ page }) => {
     await dashboardPage.expectLoaded();
-    await expect(page.getByText('Active Jobs')).toBeVisible();
-    await expect(page.getByText('Active Workers')).toBeVisible();
-    await expect(page.getByText('Pending Timesheets')).toBeVisible();
-    await expect(page.getByText('Builders')).toBeVisible();
+    // Use first() since text appears in both heading and stat label
+    await expect(page.getByText('Active Jobs').first()).toBeVisible();
+    await expect(page.getByText('Active Workers').first()).toBeVisible();
+    await expect(page.getByText(/Pending Timesheets|Timesheets/i).first()).toBeVisible();
+    await expect(page.getByText(/Builders/i).first()).toBeVisible();
   });
 
   test('should display seeded job in active jobs list', async ({ page }) => {

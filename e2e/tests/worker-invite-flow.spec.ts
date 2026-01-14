@@ -98,8 +98,8 @@ test.describe('Worker Invite Flow', () => {
     // Visit with a fake/expired token
     await page.goto('/invite/expired-fake-token-12345');
 
-    // Should show error message - either "Invite Expired" or "Invalid"
-    await expect(page.getByText(/invalid|expired/i)).toBeVisible({ timeout: 10000 });
+    // Should show error message - use heading to avoid duplicate matches
+    await expect(page.getByRole('heading', { name: /Invite Expired|Invalid/i })).toBeVisible({ timeout: 10000 });
   });
 
   test('already accepted invite shows appropriate message', async ({ page }) => {
@@ -108,7 +108,7 @@ test.describe('Worker Invite Flow', () => {
     await page.goto('/workers');
 
     // Open invite modal and create invite
-    await page.getByRole('button', { name: /Invite Worker/i }).click();
+    await page.getByRole('button', { name: /Invite Worker/i }).first().click();
     await expect(page.locator('.fixed.inset-0.z-50')).toBeVisible();
 
     const uniqueEmail = `accepted-worker-${Date.now()}@test.carptrack.com`;
@@ -148,7 +148,7 @@ test.describe('Worker Invite Flow', () => {
 
     // Try to use the same link again - should show "already used" message
     await page.goto(`/invite/${token}`);
-    await expect(page.getByText(/already.*used|already.*accepted/i)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: /Invite Already Used|Already Accepted/i })).toBeVisible({ timeout: 10000 });
   });
 
   test('invite page shows organization name and trade classification', async ({ page }) => {
@@ -156,7 +156,7 @@ test.describe('Worker Invite Flow', () => {
     await loginAsOwner(page);
     await page.goto('/workers');
 
-    await page.getByRole('button', { name: /Invite Worker/i }).click();
+    await page.getByRole('button', { name: /Invite Worker/i }).first().click();
     await expect(page.locator('.fixed.inset-0.z-50')).toBeVisible();
 
     await page.getByPlaceholder('45.00').fill('55');
@@ -192,7 +192,7 @@ test.describe('Worker Invite Flow', () => {
     await page.goto('/workers');
 
     // Create an invite
-    await page.getByRole('button', { name: /Invite Worker/i }).click();
+    await page.getByRole('button', { name: /Invite Worker/i }).first().click();
     await expect(page.locator('.fixed.inset-0.z-50')).toBeVisible();
 
     const pendingEmail = `pending-${Date.now()}@test.carptrack.com`;
@@ -216,7 +216,7 @@ test.describe('Worker Invite Flow', () => {
     await loginAsOwner(page);
     await page.goto('/workers');
 
-    await page.getByRole('button', { name: /Invite Worker/i }).click();
+    await page.getByRole('button', { name: /Invite Worker/i }).first().click();
     await page.getByPlaceholder('45.00').fill('50');
     await page.getByPlaceholder('75.00').fill('80');
     await page.getByRole('button', { name: /Generate Invite Link/i }).click();
