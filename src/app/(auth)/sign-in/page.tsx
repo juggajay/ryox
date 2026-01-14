@@ -143,18 +143,12 @@ export default function SignInPage() {
           </form>
         </div>
 
-        {/* Sign up link */}
+        {/* Invite-only notice */}
         <p
           className="text-center mt-6 text-[var(--foreground-muted)] text-sm opacity-0 animate-fade-in"
           style={{ animationDelay: "300ms" }}
         >
-          Don&apos;t have an account?{" "}
-          <Link
-            href="/sign-up"
-            className="text-[var(--accent)] hover:underline font-medium"
-          >
-            Get started
-          </Link>
+          Access is by invitation only
         </p>
       </div>
     </div>

@@ -55,9 +55,9 @@ export default function LandingPage() {
             Carpentry Business Management
           </p>
 
-          {/* Buttons */}
+          {/* Button */}
           <div
-            className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto opacity-0 animate-fade-in-up"
+            className="opacity-0 animate-fade-in-up"
             style={{ animationDelay: "500ms" }}
           >
             <Link
@@ -65,12 +65,6 @@ export default function LandingPage() {
               className="btn-primary text-center min-w-[160px]"
             >
               Sign In
-            </Link>
-            <Link
-              href="/sign-up"
-              className="btn-secondary text-center min-w-[160px]"
-            >
-              Get Started
             </Link>
           </div>
         </div>
