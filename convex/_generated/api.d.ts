@@ -1,53 +1,57 @@
 /* eslint-disable */
 /**
- * Generated API - placeholder until npx convex dev is run
+ * Generated `api` utility.
+ *
+ * THIS CODE IS AUTOMATICALLY GENERATED.
+ *
+ * To regenerate, run `npx convex dev`.
+ * @module
  */
 
-import type { GenericId } from "convex/values";
+import type * as auth from "../auth.js";
+import type * as builders from "../builders.js";
+import type * as jobs from "../jobs.js";
+import type * as workerInvites from "../workerInvites.js";
+import type * as workers from "../workers.js";
 
-export type Id<TableName extends string> = GenericId<TableName>;
+import type {
+  ApiFromModules,
+  FilterApi,
+  FunctionReference,
+} from "convex/server";
 
-export declare const api: {
-  auth: {
-    signIn: any;
-    signUp: any;
-    getUser: any;
-    getUserWithOrganization: any;
-    inviteOwner: any;
-    setPassword: any;
-  };
-  workers: {
-    list: any;
-    get: any;
-    create: any;
-    update: any;
-    addCertification: any;
-    deleteCertification: any;
-    getExpiringCertifications: any;
-  };
-  workerInvites: {
-    createInvite: any;
-    getInviteByToken: any;
-    acceptInvite: any;
-    listInvites: any;
-    cancelInvite: any;
-  };
-  builders: {
-    list: any;
-    get: any;
-    create: any;
-    update: any;
-    addContact: any;
-    updateContact: any;
-    deleteContact: any;
-  };
-  jobs: {
-    list: any;
-    get: any;
-    create: any;
-    update: any;
-    allocateWorker: any;
-    removeAllocation: any;
-    getWorkerJobs: any;
-  };
-};
+declare const fullApi: ApiFromModules<{
+  auth: typeof auth;
+  builders: typeof builders;
+  jobs: typeof jobs;
+  workerInvites: typeof workerInvites;
+  workers: typeof workers;
+}>;
+
+/**
+ * A utility for referencing Convex functions in your app's public API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = api.myModule.myFunction;
+ * ```
+ */
+export declare const api: FilterApi<
+  typeof fullApi,
+  FunctionReference<any, "public">
+>;
+
+/**
+ * A utility for referencing Convex functions in your app's internal API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = internal.myModule.myFunction;
+ * ```
+ */
+export declare const internal: FilterApi<
+  typeof fullApi,
+  FunctionReference<any, "internal">
+>;
+
+export declare const components: {};
