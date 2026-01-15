@@ -15,6 +15,7 @@ function CreateJobModal({
 }) {
   const { user } = useAuth();
   const createJob = useMutation(api.jobs.create);
+  const createBuilder = useMutation(api.builders.create);
   const builders = useQuery(api.builders.list, user ? { userId: user._id } : "skip");
 
   const [formData, setFormData] = useState({
@@ -31,6 +32,35 @@ function CreateJobModal({
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Quick add builder state
+  const [showQuickAddBuilder, setShowQuickAddBuilder] = useState(false);
+  const [builderFormData, setBuilderFormData] = useState({
+    companyName: "",
+    abn: "",
+    paymentTerms: "30",
+  });
+  const [isCreatingBuilder, setIsCreatingBuilder] = useState(false);
+
+  const handleQuickAddBuilder = async () => {
+    if (!user) return;
+    setIsCreatingBuilder(true);
+    try {
+      const newBuilderId = await createBuilder({
+        userId: user._id,
+        companyName: builderFormData.companyName,
+        abn: builderFormData.abn || "N/A",
+        paymentTerms: parseInt(builderFormData.paymentTerms) || 30,
+      });
+      setFormData({ ...formData, builderId: newBuilderId });
+      setShowQuickAddBuilder(false);
+      setBuilderFormData({ companyName: "", abn: "", paymentTerms: "30" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create builder");
+    } finally {
+      setIsCreatingBuilder(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,6 +106,8 @@ function CreateJobModal({
       expectedEndDate: "",
       notes: "",
     });
+    setShowQuickAddBuilder(false);
+    setBuilderFormData({ companyName: "", abn: "", paymentTerms: "30" });
     setError("");
     onClose();
   };
@@ -107,19 +139,78 @@ function CreateJobModal({
             <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
               Builder
             </label>
-            <select
-              value={formData.builderId}
-              onChange={(e) => setFormData({ ...formData, builderId: e.target.value })}
-              className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
-              required
-            >
-              <option value="">Select a builder...</option>
-              {builders?.map((builder) => (
-                <option key={builder._id} value={builder._id}>
-                  {builder.companyName}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-2">
+              <select
+                value={formData.builderId}
+                onChange={(e) => setFormData({ ...formData, builderId: e.target.value })}
+                className="flex-1 px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
+                required
+              >
+                <option value="">Select a builder...</option>
+                {builders?.map((builder) => (
+                  <option key={builder._id} value={builder._id}>
+                    {builder.companyName}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowQuickAddBuilder(!showQuickAddBuilder)}
+                className="px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg hover:border-[var(--accent)] text-[var(--foreground-muted)] hover:text-[var(--foreground)] transition-colors whitespace-nowrap"
+              >
+                + New
+              </button>
+            </div>
+
+            {/* Quick Add Builder Form */}
+            {showQuickAddBuilder && (
+              <div className="mt-3 p-4 bg-[var(--background)] border border-[var(--accent)]/30 rounded-lg space-y-3">
+                <p className="text-sm font-medium text-[var(--accent)]">Quick Add Builder</p>
+                <input
+                  type="text"
+                  value={builderFormData.companyName}
+                  onChange={(e) => setBuilderFormData({ ...builderFormData, companyName: e.target.value })}
+                  className="w-full px-3 py-2 bg-[var(--card)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)] text-sm"
+                  placeholder="Company name *"
+                />
+                <div className="grid grid-cols-2 gap-3">
+                  <input
+                    type="text"
+                    value={builderFormData.abn}
+                    onChange={(e) => setBuilderFormData({ ...builderFormData, abn: e.target.value })}
+                    className="w-full px-3 py-2 bg-[var(--card)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)] text-sm"
+                    placeholder="ABN (optional)"
+                  />
+                  <input
+                    type="number"
+                    value={builderFormData.paymentTerms}
+                    onChange={(e) => setBuilderFormData({ ...builderFormData, paymentTerms: e.target.value })}
+                    className="w-full px-3 py-2 bg-[var(--card)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)] text-sm"
+                    placeholder="Payment terms (days)"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleQuickAddBuilder}
+                    disabled={!builderFormData.companyName || isCreatingBuilder}
+                    className="flex-1 px-3 py-2 bg-[var(--accent)] text-[var(--background)] rounded-lg text-sm font-medium disabled:opacity-50"
+                  >
+                    {isCreatingBuilder ? "Adding..." : "Add Builder"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowQuickAddBuilder(false);
+                      setBuilderFormData({ companyName: "", abn: "", paymentTerms: "30" });
+                    }}
+                    className="px-3 py-2 border border-[var(--border)] rounded-lg text-sm hover:border-[var(--foreground-muted)]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div>
@@ -272,7 +363,7 @@ function CreateJobModal({
 
           <button
             type="submit"
-            disabled={isLoading || !builders || builders.length === 0}
+            disabled={isLoading}
             className="btn-primary w-full disabled:opacity-50"
           >
             {isLoading ? "Creating..." : "Create Job"}

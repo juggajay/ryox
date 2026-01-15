@@ -95,6 +95,52 @@ export const create = mutation({
   },
 });
 
+// Quick create worker (for temp/casual workers with minimal info)
+export const createQuick = mutation({
+  args: {
+    userId: v.id("users"),
+    name: v.string(),
+    phone: v.string(),
+    payRate: v.number(),
+    chargeOutRate: v.number(),
+    tradeClassification: v.optional(
+      v.union(
+        v.literal("apprentice"),
+        v.literal("qualified"),
+        v.literal("leadingHand"),
+        v.literal("foreman")
+      )
+    ),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user || user.role !== "owner") {
+      throw new Error("Only owners can create workers");
+    }
+
+    const workerId = await ctx.db.insert("workers", {
+      name: args.name,
+      phone: args.phone,
+      email: "", // Not required for temp workers
+      emergencyContact: {
+        name: "N/A",
+        phone: "N/A",
+        relationship: "N/A",
+      },
+      employmentType: "subcontractor",
+      tradeClassification: args.tradeClassification || "qualified",
+      payRate: args.payRate,
+      chargeOutRate: args.chargeOutRate,
+      startDate: Date.now(),
+      organizationId: user.organizationId,
+      status: "active",
+      createdAt: Date.now(),
+    });
+
+    return workerId;
+  },
+});
+
 // Update worker
 export const update = mutation({
   args: {

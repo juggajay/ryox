@@ -11,6 +11,7 @@
 import type * as auth from "../auth.js";
 import type * as builders from "../builders.js";
 import type * as chat from "../chat.js";
+import type * as crons from "../crons.js";
 import type * as embeddings from "../embeddings.js";
 import type * as expenses from "../expenses.js";
 import type * as files from "../files.js";
@@ -23,6 +24,8 @@ import type * as lib_chunker from "../lib/chunker.js";
 import type * as organizations from "../organizations.js";
 import type * as overheads from "../overheads.js";
 import type * as reports from "../reports.js";
+import type * as smartKnowledge from "../smartKnowledge.js";
+import type * as smartKnowledgeHelpers from "../smartKnowledgeHelpers.js";
 import type * as testing from "../testing.js";
 import type * as timesheets from "../timesheets.js";
 import type * as workerInvites from "../workerInvites.js";
@@ -39,6 +42,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   builders: typeof builders;
   chat: typeof chat;
+  crons: typeof crons;
   embeddings: typeof embeddings;
   expenses: typeof expenses;
   files: typeof files;
@@ -51,6 +55,8 @@ declare const fullApi: ApiFromModules<{
   organizations: typeof organizations;
   overheads: typeof overheads;
   reports: typeof reports;
+  smartKnowledge: typeof smartKnowledge;
+  smartKnowledgeHelpers: typeof smartKnowledgeHelpers;
   testing: typeof testing;
   timesheets: typeof timesheets;
   workerInvites: typeof workerInvites;
