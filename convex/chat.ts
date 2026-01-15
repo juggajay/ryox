@@ -193,6 +193,45 @@ export const markAsRead = mutation({
   },
 });
 
+// Toggle a reaction on a message
+export const toggleReaction = mutation({
+  args: {
+    userId: v.id("users"),
+    messageId: v.id("chatMessages"),
+    emoji: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error("User not found");
+
+    const message = await ctx.db.get(args.messageId);
+    if (!message) throw new Error("Message not found");
+
+    const channel = await ctx.db.get(message.channelId);
+    if (!channel) throw new Error("Channel not found");
+    if (!channel.participants.includes(args.userId)) {
+      throw new Error("Not a member of this channel");
+    }
+
+    const reactions = message.reactions || [];
+    const existingIndex = reactions.findIndex(
+      (r) => r.emoji === args.emoji && r.userId === args.userId
+    );
+
+    if (existingIndex >= 0) {
+      // Remove reaction
+      reactions.splice(existingIndex, 1);
+    } else {
+      // Add reaction
+      reactions.push({ emoji: args.emoji, userId: args.userId });
+    }
+
+    await ctx.db.patch(args.messageId, { reactions });
+
+    return { success: true };
+  },
+});
+
 // Create a DM channel or get existing one
 export const getOrCreateDM = mutation({
   args: {
