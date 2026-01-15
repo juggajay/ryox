@@ -165,15 +165,15 @@ function CreateJobModal({
               </div>
             )}
 
-            <div className="flex gap-2">
+            <div className="space-y-2">
               <select
                 value={formData.builderId}
                 onChange={(e) => {
                   setFormData({ ...formData, builderId: e.target.value });
                   setQuickAddedBuilder(null);
                 }}
-                className="flex-1 px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
-                required
+                className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
+                required={!quickAddedBuilder}
               >
                 <option value="">Select a builder...</option>
                 {builders?.map((builder) => (
@@ -191,17 +191,11 @@ function CreateJobModal({
               <button
                 type="button"
                 onClick={() => setShowQuickAddBuilder(!showQuickAddBuilder)}
-                className="px-4 py-3 bg-[var(--accent)]/10 border border-[var(--accent)]/50 rounded-lg hover:bg-[var(--accent)]/20 hover:border-[var(--accent)] text-[var(--accent)] transition-colors whitespace-nowrap font-medium"
+                className="w-full px-4 py-3 bg-[var(--accent)] text-[var(--background)] rounded-lg hover:opacity-90 transition-colors font-medium"
               >
-                + New Builder
+                + Add New Builder
               </button>
             </div>
-
-            {!builders?.length && !showQuickAddBuilder && !quickAddedBuilder && (
-              <p className="mt-2 text-sm text-[var(--foreground-muted)]">
-                No builders yet? Click &quot;+ New Builder&quot; to add one quickly.
-              </p>
-            )}
 
             {/* Quick Add Builder Form */}
             {showQuickAddBuilder && (
