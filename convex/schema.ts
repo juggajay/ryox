@@ -346,8 +346,26 @@ export default defineSchema({
     channelId: v.id("chatChannels"),
     senderId: v.id("users"),
     content: v.string(),
+    // Attachments - now supports multiple files
+    attachments: v.optional(v.array(v.object({
+      url: v.string(),
+      type: v.union(v.literal("image"), v.literal("file")),
+      name: v.string(),
+      size: v.number(),
+    }))),
+    // Legacy single attachment (keep for backwards compatibility)
     attachmentUrl: v.optional(v.string()),
     readBy: v.array(v.id("users")),
+    // Reactions
+    reactions: v.optional(v.array(v.object({
+      emoji: v.string(),
+      userId: v.id("users"),
+    }))),
+    // Mentions
+    mentions: v.optional(v.array(v.id("users"))),
+    // Edit/Delete
+    editedAt: v.optional(v.number()),
+    isDeleted: v.optional(v.boolean()),
     createdAt: v.number(),
   }).index("by_channel", ["channelId"]),
 
