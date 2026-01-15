@@ -5,7 +5,8 @@ import { useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '@/lib/auth-context';
 
-interface ExtractedData {
+// Single day extracted data (legacy)
+interface ExtractedDataSingle {
   date: string | null;
   startTime: string | null;
   endTime: string | null;
@@ -15,11 +16,30 @@ interface ExtractedData {
   notes: string | null;
 }
 
-interface Props {
-  onExtracted: (data: ExtractedData, photoStorageId: string) => void;
+// Weekly extracted data
+interface ExtractedDataWeekly {
+  entries: Array<{
+    dayOfWeek: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    breakMinutes: number;
+  }>;
+  signatoryName?: string;
+  signatoryCompany?: string;
+  totalHours?: number;
+  siteName?: string;
+  workerName?: string;
 }
 
-export function TimesheetPhotoUpload({ onExtracted }: Props) {
+type ExtractedData = ExtractedDataSingle | ExtractedDataWeekly;
+
+interface Props {
+  onExtracted: (data: ExtractedData, photoStorageId: string) => void;
+  mode?: 'single' | 'weekly';
+}
+
+export function TimesheetPhotoUpload({ onExtracted, mode = 'weekly' }: Props) {
   const { user } = useAuth();
   const [isUploading, setIsUploading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
@@ -29,6 +49,7 @@ export function TimesheetPhotoUpload({ onExtracted }: Props) {
 
   const generateUploadUrl = useMutation(api.timesheets.generateUploadUrl);
   const extractFromPhoto = useMutation(api.timesheets.extractFromPhoto);
+  const extractWeeklyFromPhoto = useMutation(api.timesheets.extractWeeklyFromPhoto);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -56,11 +77,16 @@ export function TimesheetPhotoUpload({ onExtracted }: Props) {
       setIsUploading(false);
       setIsExtracting(true);
 
-      // Extract data with Gemini
-      const result = await extractFromPhoto({
-        userId: user._id,
-        photoStorageId: storageId,
-      });
+      // Extract data with Gemini (use weekly extraction by default)
+      const result = mode === 'weekly'
+        ? await extractWeeklyFromPhoto({
+            userId: user._id,
+            photoStorageId: storageId,
+          })
+        : await extractFromPhoto({
+            userId: user._id,
+            photoStorageId: storageId,
+          });
 
       if (result.success && result.data) {
         onExtracted(result.data as ExtractedData, result.photoStorageId!);
@@ -108,12 +134,12 @@ export function TimesheetPhotoUpload({ onExtracted }: Props) {
         ) : (
           <div className="space-y-2">
             <div className="text-5xl">📷</div>
-            <p className="text-lg font-medium">Upload Timesheet Photo</p>
+            <p className="text-lg font-medium">Upload Signed Timesheet</p>
             <p className="text-sm text-[var(--foreground-muted)]">
-              Take a photo of your signed paper timesheet
+              Take a photo or choose from your gallery
             </p>
             <p className="text-xs text-[var(--foreground-muted)]">
-              AI will extract the date, times, and signature details
+              AI will extract all days, times, and signature details
             </p>
           </div>
         )}
@@ -121,7 +147,6 @@ export function TimesheetPhotoUpload({ onExtracted }: Props) {
           ref={fileInputRef}
           type="file"
           accept="image/*"
-          capture="environment"
           onChange={handleFileSelect}
           className="hidden"
         />

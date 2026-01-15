@@ -196,11 +196,37 @@ export default defineSchema({
     .index("by_job", ["jobId"])
     .index("by_worker", ["workerId"]),
 
-  // Timesheets
+  // Timesheet Batches (weekly submissions)
+  timesheetBatches: defineTable({
+    organizationId: v.id("organizations"),
+    workerId: v.id("workers"),
+    jobId: v.id("jobs"),
+    weekStartDate: v.number(), // Monday 00:00:00 timestamp
+    photoUrl: v.optional(v.string()), // Storage ID of uploaded timesheet photo
+    signatureUrl: v.optional(v.string()), // Storage ID of signature
+    signatoryName: v.optional(v.string()),
+    signatoryCompany: v.optional(v.string()),
+    totalHours: v.number(),
+    status: v.union(
+      v.literal("submitted"),
+      v.literal("approved"),
+      v.literal("queried")
+    ),
+    queryNote: v.optional(v.string()),
+    submittedAt: v.number(),
+    approvedAt: v.optional(v.number()),
+    approvedBy: v.optional(v.id("users")),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_worker", ["workerId"])
+    .index("by_status", ["status"]),
+
+  // Timesheets (individual daily entries)
   timesheets: defineTable({
     organizationId: v.id("organizations"),
     jobId: v.id("jobs"),
     workerId: v.id("workers"),
+    batchId: v.optional(v.id("timesheetBatches")), // Links to weekly batch
     date: v.number(),
     startTime: v.string(),
     endTime: v.string(),
@@ -231,7 +257,8 @@ export default defineSchema({
     .index("by_organization", ["organizationId"])
     .index("by_job", ["jobId"])
     .index("by_worker", ["workerId"])
-    .index("by_status", ["status"]),
+    .index("by_status", ["status"])
+    .index("by_batch", ["batchId"]),
 
   // Expenses
   expenses: defineTable({
