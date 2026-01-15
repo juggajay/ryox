@@ -31,6 +31,38 @@ A real-time chat system that feels instantly familiar (WhatsApp-style) while sup
 - **Job channels**: Workers added when allocated to job, removed when deallocated
 - **DMs**: Created on-demand when user initiates conversation
 
+### Channel Info View
+
+Tap channel name in header to open info panel:
+
+**For all channels:**
+- Participants list with avatars
+- Shared media grid (photos, files)
+- Search within channel shortcut
+- Notification settings (mute)
+
+**For job channels:**
+- Job name and site address
+- Link to full job page
+- List of allocated workers
+
+**For DMs:**
+- Contact's profile info
+- Phone number (tap to call)
+- Shared media between you
+
+### Channel Lifecycle
+
+**Job channels:**
+- Cannot manually leave (managed by job allocation)
+- Archived when job marked complete (read-only, searchable)
+
+**DMs with departed workers:**
+- History preserved
+- Marked as "No longer in organization"
+- Cannot send new messages
+- Can archive/hide from list
+
 ---
 
 ## Core Chat Experience
@@ -44,6 +76,23 @@ A real-time chat system that feels instantly familiar (WhatsApp-style) while sup
 - Timestamp on each message (subtle, HH:mm format)
 - Messages in chronological order, newest at bottom
 - Auto-scroll to newest on channel open
+- **Date separators**: "Today", "Yesterday", or "Jan 15" between message groups from different days
+
+### Text Formatting
+
+Basic markdown support in messages:
+- `*bold*` → **bold**
+- `_italic_` → _italic_
+- `` `code` `` → `code`
+- No complex formatting (headers, lists, etc.) - keep it simple
+
+### Link Previews
+
+When a URL is detected in a message:
+- Fetch Open Graph metadata (title, description, image)
+- Display as a card below the message text
+- Tap card to open link in browser
+- Preview generated on send (not retroactively)
 
 ### Message Input
 
@@ -52,6 +101,26 @@ A real-time chat system that feels instantly familiar (WhatsApp-style) while sup
 - **Left**: + button for attachments
 - **Right**: Send button (when text entered) or mic button (when empty)
 - Send button replaces mic button dynamically
+
+### Draft Messages
+
+- Draft saved per channel when switching away with unsent text
+- Draft restored when returning to channel
+- Draft indicator shown in channel list (italic "Draft: ..." as preview)
+- Drafts stored locally, not synced across devices
+
+### Scroll & Navigation
+
+**Unread behavior:**
+- Opening channel with unread messages → jump to first unread message
+- "X unread messages" banner at top with "Jump to latest" option
+- Unread divider line: "── New messages ──"
+
+**Scroll to bottom:**
+- Floating button appears when scrolled up (↓ icon)
+- If new messages arrive while scrolled up: button shows "↓ 3 new"
+- Tap to jump to newest message
+- Button auto-hides when at bottom
 
 ---
 
@@ -93,6 +162,30 @@ Create a dedicated sub-conversation for bigger discussions.
 
 ## Message Features
 
+### Long-Press Context Menu
+
+Full list of options when long-pressing a message:
+
+| Option | Availability | Description |
+|--------|--------------|-------------|
+| React | Always | Opens emoji picker |
+| Reply | Always | Start a quick reply |
+| Forward | Always | Send to another channel/DM |
+| Copy | Always | Copy text to clipboard |
+| Pin | Always | Pin/unpin message |
+| Start Thread | Always | Create named breakout thread |
+| Edit | Own messages, 15 min | Edit message content |
+| Delete | Own messages, 15 min | Delete message |
+
+### Message Forwarding
+
+Forward any message to another channel or DM:
+1. Long-press → "Forward"
+2. Select destination channel(s) - can multi-select
+3. Optional: add a comment
+4. Forwarded message shows "Forwarded from #channel" label
+5. Preserves original sender name and timestamp
+
 ### Reactions
 
 **Interaction:**
@@ -113,12 +206,14 @@ Create a dedicated sub-conversation for bigger discussions.
 - Slide left to cancel
 - Waveform animation while recording
 - Duration counter
+- **Max duration**: 5 minutes (counter turns red at 4:30 warning)
 
 **Playback:**
 - Waveform visualization with progress bar
 - Play/pause button
 - 1.5x / 2x speed toggle
 - Duration shown
+- Plays through earpiece by default, speaker icon to switch
 
 ### Read Receipts
 
@@ -135,14 +230,20 @@ Create a dedicated sub-conversation for bigger discussions.
 
 **Sending:**
 - Tap + button → Camera / Photo Library / Files
-- Multiple photos can be selected
-- Preview before sending
+- Multiple photos can be selected (up to 10 at once)
+- Preview before sending with optional caption
+
+**Limits:**
+- **Max file size**: 25MB per file
+- **Image compression**: Photos auto-compressed to ~1MB while maintaining quality
+- **Original option**: Toggle to send original quality (larger file, slower)
 
 **Display:**
 - Photos: inline thumbnail, tap for full-screen with pinch-zoom
 - Multiple photos: gallery view, swipe through
 - Files: attachment card with filename, size, icon
 - Tap file to download/preview
+- Download progress indicator for large files
 
 ### @ Mentions
 
@@ -412,6 +513,69 @@ Sorted by most recent message.
 
 ---
 
+## Error Handling
+
+### Send Failures
+
+When a message fails to send:
+- Red exclamation icon on message
+- "Not sent" label below
+- Tap message → "Retry" or "Delete"
+- Failed messages stay in position (don't disappear)
+
+### Connection Status
+
+- **Momentary loss**: Silent retry in background
+- **Extended loss (>5 sec)**: Yellow banner "Connecting..."
+- **Offline**: Gray banner "No connection - messages will send when online"
+- Messages queued locally during brief offline periods
+
+### Loading States
+
+- Channel list: Skeleton loaders on first load
+- Messages: Spinner at top when loading older messages
+- Media: Placeholder with progress bar while uploading/downloading
+
+### Empty States
+
+**New channel (no messages):**
+- Friendly illustration
+- "No messages yet. Say hello!"
+
+**Search with no results:**
+- "No messages found"
+- Suggestion to adjust filters
+
+---
+
+## Desktop & Tablet Layout
+
+### Tablet (768px+)
+
+Side-by-side layout:
+- Left: Channel list (320px fixed)
+- Right: Chat view (remaining space)
+- Both visible simultaneously
+- No slide animations needed
+
+### Desktop (1200px+)
+
+Three-column when thread open:
+- Left: Channel list (280px)
+- Center: Main chat (flexible)
+- Right: Thread panel (400px)
+
+Thread opens in side panel instead of modal overlay.
+
+### Shared Behaviors
+
+- Keyboard shortcuts: Enter to send, Shift+Enter for newline
+- Drag-and-drop file upload
+- Right-click context menu (same options as long-press)
+- Emoji picker via `:` trigger (e.g., `:thumbs` → 👍)
+
+---
+
 ## Permissions Summary
 
 | Action | Worker | Owner |
@@ -419,6 +583,7 @@ Sorted by most recent message.
 | Send messages | ✓ | ✓ |
 | React to messages | ✓ | ✓ |
 | Reply / start threads | ✓ | ✓ |
+| Forward messages | ✓ | ✓ |
 | Pin messages | ✓ | ✓ |
 | Create polls/checklists | ✓ | ✓ |
 | Share location | ✓ | ✓ |
@@ -430,9 +595,20 @@ Sorted by most recent message.
 
 ## Technical Notes
 
+### Limits Summary
+
+| Limit | Value |
+|-------|-------|
+| Max file size | 25MB |
+| Max photos per message | 10 |
+| Voice message max duration | 5 minutes |
+| Edit/delete window | 15 minutes |
+| Max pins per channel | 25 |
+| Poll options | 2-5 |
+
 ### No Offline Support
 
-Online-only. Signal coverage is reliable in operating areas.
+Online-only. Signal coverage is reliable in operating areas. Brief disconnections handled with local queue.
 
 ### No In-App Calling
 
