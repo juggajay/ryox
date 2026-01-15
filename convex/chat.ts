@@ -134,6 +134,12 @@ export const sendMessage = mutation({
     channelId: v.id("chatChannels"),
     content: v.string(),
     attachmentUrl: v.optional(v.string()),
+    attachments: v.optional(v.array(v.object({
+      url: v.string(),
+      type: v.union(v.literal("image"), v.literal("file")),
+      name: v.string(),
+      size: v.number(),
+    }))),
   },
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
@@ -145,12 +151,40 @@ export const sendMessage = mutation({
       throw new Error("Not a member of this channel");
     }
 
+    // Parse mentions from content (@username pattern)
+    const mentionPattern = /@(\w+)/g;
+    const mentionMatches = args.content.match(mentionPattern) || [];
+
+    // Find mentioned users
+    const mentions: typeof args.userId[] = [];
+    if (mentionMatches.length > 0) {
+      const orgUsers = await ctx.db
+        .query("users")
+        .withIndex("by_organization", (q) =>
+          q.eq("organizationId", user.organizationId)
+        )
+        .collect();
+
+      for (const match of mentionMatches) {
+        const username = match.slice(1).toLowerCase(); // Remove @
+        const mentionedUser = orgUsers.find(
+          (u) => u.name.toLowerCase().replace(/\s+/g, '') === username ||
+                 u.name.toLowerCase().split(' ')[0] === username
+        );
+        if (mentionedUser && !mentions.includes(mentionedUser._id)) {
+          mentions.push(mentionedUser._id);
+        }
+      }
+    }
+
     const messageId = await ctx.db.insert("chatMessages", {
       channelId: args.channelId,
       senderId: args.userId,
       content: args.content,
       attachmentUrl: args.attachmentUrl,
-      readBy: [args.userId], // Sender has read it
+      attachments: args.attachments,
+      readBy: [args.userId],
+      mentions: mentions.length > 0 ? mentions : undefined,
       createdAt: Date.now(),
     });
 
