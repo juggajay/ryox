@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 import { useMutation } from 'convex/react';
 import { api } from '../../../convex/_generated/api';
 import { Id } from '../../../convex/_generated/dataModel';
+import { ReadReceiptModal } from './ReadReceiptModal';
 
 // Quick reaction emojis
 const QUICK_REACTIONS = ['👍', '✅', '❤️', '😂', '🔥'];
@@ -47,6 +48,7 @@ export function ChatMessage({ message, userId, onEdit }: ChatMessageProps) {
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
+  const [showReadReceipts, setShowReadReceipts] = useState(false);
 
   const toggleReaction = useMutation(api.chat.toggleReaction);
   const editMessage = useMutation(api.chat.editMessage);
@@ -191,10 +193,17 @@ export function ChatMessage({ message, userId, onEdit }: ChatMessageProps) {
           }`}>
             {message.editedAt && <span>(edited)</span>}
             <span>{format(new Date(message.createdAt), 'HH:mm')}</span>
-            {message.isOwnMessage && (
-              <span title={`Seen by ${message.readByCount}`}>
-                {message.readByCount > 1 ? '✓✓' : '✓'}
-              </span>
+            {message.isOwnMessage && message.readByCount > 1 && (
+              <button
+                onClick={() => setShowReadReceipts(true)}
+                className="hover:underline"
+                title={`Seen by ${message.readByCount}`}
+              >
+                ✓✓ {message.readByCount > 2 && message.readByCount}
+              </button>
+            )}
+            {message.isOwnMessage && message.readByCount === 1 && (
+              <span title="Sent">✓</span>
             )}
           </div>
         </div>
@@ -290,6 +299,15 @@ export function ChatMessage({ message, userId, onEdit }: ChatMessageProps) {
         >
           😀
         </button>
+
+        {/* Read receipts modal */}
+        {showReadReceipts && (
+          <ReadReceiptModal
+            messageId={message._id}
+            userId={userId}
+            onClose={() => setShowReadReceipts(false)}
+          />
+        )}
       </div>
     </div>
   );
