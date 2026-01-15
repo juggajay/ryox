@@ -232,7 +232,7 @@ export const askQuestion = action({
 
     // Step 4: Call Gemini with RAG context
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${geminiApiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -265,6 +265,29 @@ Provide a clear, practical answer with source citations.`,
     );
 
     const result = await response.json();
+
+    // Log response for debugging
+    if (!response.ok) {
+      console.error("Gemini API error:", response.status, JSON.stringify(result));
+    }
+
+    // Check for blocked content or errors
+    if (result.error) {
+      console.error("Gemini error:", result.error);
+      return {
+        answer: `API Error: ${result.error.message || "Unknown error"}`,
+        sources
+      };
+    }
+
+    if (result.promptFeedback?.blockReason) {
+      console.error("Content blocked:", result.promptFeedback.blockReason);
+      return {
+        answer: "The question could not be processed. Please try rephrasing.",
+        sources
+      };
+    }
+
     const answer =
       result.candidates?.[0]?.content?.parts?.[0]?.text ||
       "Sorry, I couldn't generate an answer. Please try again.";
