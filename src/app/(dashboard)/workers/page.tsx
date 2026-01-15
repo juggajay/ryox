@@ -237,15 +237,15 @@ export default function WorkersPage() {
                       {invite.email || "No email specified"}
                     </p>
                     <p className="text-sm text-[var(--foreground-muted)]">
-                      {invite.role === "owner" ? "Owner" : tradeLabels[invite.tradeClassification || "qualified"]}
+                      {(invite.role || "worker") === "owner" ? "Owner" : tradeLabels[invite.tradeClassification || "qualified"]}
                     </p>
                   </div>
                   <span className={`text-xs px-2 py-1 rounded-full ${
-                    invite.role === "owner"
+                    (invite.role || "worker") === "owner"
                       ? "bg-purple-500/10 text-purple-400"
                       : "bg-[var(--accent)]/10 text-[var(--accent)]"
                   }`}>
-                    {invite.role === "owner" ? "Owner Invite" : "Worker Invite"}
+                    {(invite.role || "worker") === "owner" ? "Owner Invite" : "Worker Invite"}
                   </span>
                 </li>
               ))}

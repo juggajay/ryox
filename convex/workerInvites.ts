@@ -136,8 +136,11 @@ export const acceptInvite = mutation({
       throw new Error("Email already registered");
     }
 
+    // Default role to "worker" for backwards compatibility
+    const role = invite.role || "worker";
+
     // For worker invites, require phone and emergency contact
-    if (invite.role === "worker") {
+    if (role === "worker") {
       if (!args.phone || !args.emergencyContact) {
         throw new Error("Phone and emergency contact are required for worker accounts");
       }
@@ -155,7 +158,7 @@ export const acceptInvite = mutation({
     let userId: any;
     let workerId: any = undefined;
 
-    if (invite.role === "worker") {
+    if (role === "worker") {
       // Create worker profile
       workerId = await ctx.db.insert("workers", {
         organizationId: invite.organizationId,

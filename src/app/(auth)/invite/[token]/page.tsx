@@ -59,7 +59,8 @@ export default function InvitePage() {
     setIsLoading(true);
 
     try {
-      const isWorker = invite?.role === "worker";
+      // Default to worker role for backwards compatibility
+      const isWorker = (invite?.role || "worker") === "worker";
 
       await acceptInvite({
         token,
@@ -171,7 +172,7 @@ export default function InvitePage() {
             <span className="font-semibold text-[var(--accent)]">
               {invite.organizationName}
             </span>{" "}
-            as {invite.role === "owner" ? "an Owner" : `a ${tradeLabels[invite.tradeClassification || "qualified"]}`}
+            as {(invite.role || "worker") === "owner" ? "an Owner" : `a ${tradeLabels[invite.tradeClassification || "qualified"]}`}
           </p>
         </div>
 
@@ -212,7 +213,7 @@ export default function InvitePage() {
                 />
               </div>
 
-              <div className={invite.role === "worker" ? "col-span-2 sm:col-span-1" : "col-span-2"}>
+              <div className={(invite.role || "worker") === "worker" ? "col-span-2 sm:col-span-1" : "col-span-2"}>
                 <label
                   htmlFor="email"
                   className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]"
@@ -231,7 +232,7 @@ export default function InvitePage() {
                 />
               </div>
 
-              {invite.role === "worker" && (
+              {(invite.role || "worker") === "worker" && (
                 <div className="col-span-2 sm:col-span-1">
                   <label
                     htmlFor="phone"

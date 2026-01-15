@@ -76,7 +76,8 @@ export default defineSchema({
     organizationId: v.id("organizations"),
     token: v.string(),
     email: v.optional(v.string()),
-    role: v.union(v.literal("worker"), v.literal("owner")),
+    // Role defaults to "worker" for backwards compatibility with existing invites
+    role: v.optional(v.union(v.literal("worker"), v.literal("owner"))),
     // Worker-specific fields (optional, only for worker invites)
     employmentType: v.optional(v.union(v.literal("employee"), v.literal("subcontractor"))),
     tradeClassification: v.optional(v.union(
@@ -85,6 +86,9 @@ export default defineSchema({
       v.literal("leadingHand"),
       v.literal("foreman")
     )),
+    // Legacy fields for backwards compatibility (rates now on allocations)
+    payRate: v.optional(v.number()),
+    chargeOutRate: v.optional(v.number()),
     status: v.union(
       v.literal("pending"),
       v.literal("accepted"),
