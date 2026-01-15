@@ -140,18 +140,19 @@ export const getUserWithOrganization = query({
   },
 });
 
-// Invite additional owner
-export const inviteOwner = mutation({
+// Add another owner to the organization
+export const addOwner = mutation({
   args: {
-    inviterId: v.id("users"),
+    userId: v.id("users"),
     email: v.string(),
     name: v.string(),
+    password: v.string(),
   },
   handler: async (ctx, args) => {
-    // Verify inviter is an owner
-    const inviter = await ctx.db.get(args.inviterId);
-    if (!inviter || inviter.role !== "owner") {
-      throw new Error("Only owners can invite other owners");
+    // Verify caller is an owner
+    const caller = await ctx.db.get(args.userId);
+    if (!caller || caller.role !== "owner") {
+      throw new Error("Only owners can add other owners");
     }
 
     // Check if email already exists
@@ -164,12 +165,16 @@ export const inviteOwner = mutation({
       throw new Error("Email already registered");
     }
 
-    // Create user as owner (without password - they'll set it via invite)
-    const userId = await ctx.db.insert("users", {
+    // Hash password
+    const passwordHash = await hashPassword(args.password);
+
+    // Create user as owner
+    const newUserId = await ctx.db.insert("users", {
       email: args.email.toLowerCase(),
       name: args.name,
+      passwordHash,
       role: "owner",
-      organizationId: inviter.organizationId,
+      organizationId: caller.organizationId,
       createdAt: Date.now(),
     });
 
@@ -177,18 +182,41 @@ export const inviteOwner = mutation({
     const companyChannel = await ctx.db
       .query("chatChannels")
       .withIndex("by_organization", (q) =>
-        q.eq("organizationId", inviter.organizationId)
+        q.eq("organizationId", caller.organizationId)
       )
       .filter((q) => q.eq(q.field("type"), "company"))
       .first();
 
     if (companyChannel) {
       await ctx.db.patch(companyChannel._id, {
-        participants: [...companyChannel.participants, userId],
+        participants: [...companyChannel.participants, newUserId],
       });
     }
 
-    return userId;
+    return newUserId;
+  },
+});
+
+// List all owners in organization
+export const listOwners = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) return [];
+
+    const owners = await ctx.db
+      .query("users")
+      .withIndex("by_organization", (q) => q.eq("organizationId", user.organizationId))
+      .filter((q) => q.eq(q.field("role"), "owner"))
+      .collect();
+
+    return owners.map((o) => ({
+      _id: o._id,
+      name: o.name,
+      email: o.email,
+      createdAt: o.createdAt,
+      lastLoginAt: o.lastLoginAt,
+    }));
   },
 });
 
@@ -208,6 +236,91 @@ export const setPassword = mutation({
     await ctx.db.patch(args.userId, {
       passwordHash,
       lastLoginAt: Date.now(),
+    });
+
+    return { success: true };
+  },
+});
+
+// Update user profile
+export const updateProfile = mutation({
+  args: {
+    userId: v.id("users"),
+    name: v.string(),
+    email: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    // Check if email is being changed and if it's already taken
+    if (args.email.toLowerCase() !== user.email) {
+      const existingUser = await ctx.db
+        .query("users")
+        .withIndex("by_email", (q) => q.eq("email", args.email.toLowerCase()))
+        .first();
+
+      if (existingUser) {
+        throw new Error("Email already in use");
+      }
+    }
+
+    await ctx.db.patch(args.userId, {
+      name: args.name,
+      email: args.email.toLowerCase(),
+    });
+
+    return { success: true };
+  },
+});
+
+// Update organization
+export const updateOrganization = mutation({
+  args: {
+    userId: v.id("users"),
+    name: v.string(),
+    abn: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user || user.role !== "owner") {
+      throw new Error("Only owners can update organization");
+    }
+
+    await ctx.db.patch(user.organizationId, {
+      name: args.name,
+      abn: args.abn,
+    });
+
+    return { success: true };
+  },
+});
+
+// Change password
+export const changePassword = mutation({
+  args: {
+    userId: v.id("users"),
+    currentPassword: v.string(),
+    newPassword: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user || !user.passwordHash) {
+      throw new Error("User not found");
+    }
+
+    // Verify current password
+    const isValid = await verifyPassword(args.currentPassword, user.passwordHash);
+    if (!isValid) {
+      throw new Error("Current password is incorrect");
+    }
+
+    // Hash and save new password
+    const passwordHash = await hashPassword(args.newPassword);
+    await ctx.db.patch(args.userId, {
+      passwordHash,
     });
 
     return { success: true };

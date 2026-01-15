@@ -30,8 +30,9 @@ const frequencyLabels: Record<Frequency, string> = {
 
 export default function SettingsPage() {
   const { user } = useAuth();
-  const [activeSection, setActiveSection] = useState<'overheads' | 'organization'>('overheads');
+  const [activeSection, setActiveSection] = useState<'overheads' | 'organization' | 'owners'>('overheads');
   const [showAddOverhead, setShowAddOverhead] = useState(false);
+  const [showAddOwner, setShowAddOwner] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [overheadForm, setOverheadForm] = useState({
@@ -39,6 +40,12 @@ export default function SettingsPage() {
     category: 'other' as OverheadCategory,
     amount: '',
     frequency: 'monthly' as Frequency,
+  });
+
+  const [ownerForm, setOwnerForm] = useState({
+    name: '',
+    email: '',
+    password: '',
   });
 
   // Queries
@@ -54,9 +61,14 @@ export default function SettingsPage() {
     user ? { userId: user._id } : 'skip'
   );
 
+  const owners = useQuery(api.auth.listOwners,
+    user ? { userId: user._id } : 'skip'
+  );
+
   // Mutations
   const addOverhead = useMutation(api.overheads.add);
   const removeOverhead = useMutation(api.overheads.remove);
+  const addOwner = useMutation(api.auth.addOwner);
 
   const handleAddOverhead = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,6 +102,29 @@ export default function SettingsPage() {
   const handleDeleteOverhead = async (overheadId: Id<"overheads">) => {
     if (!user || !confirm('Are you sure you want to delete this overhead?')) return;
     await removeOverhead({ userId: user._id, overheadId });
+  };
+
+  const handleAddOwner = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !ownerForm.name || !ownerForm.email || !ownerForm.password) return;
+
+    setIsSubmitting(true);
+    try {
+      await addOwner({
+        userId: user._id,
+        name: ownerForm.name,
+        email: ownerForm.email,
+        password: ownerForm.password,
+      });
+
+      setOwnerForm({ name: '', email: '', password: '' });
+      setShowAddOwner(false);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to add owner';
+      alert(errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (user?.role !== 'owner') {
@@ -129,6 +164,16 @@ export default function SettingsPage() {
           }`}
         >
           Organization
+        </button>
+        <button
+          onClick={() => setActiveSection('owners')}
+          className={`px-4 py-2 rounded-t font-medium transition-colors ${
+            activeSection === 'owners'
+              ? 'bg-[var(--accent)] text-[var(--background)]'
+              : 'text-[var(--foreground-muted)] hover:text-[var(--foreground)]'
+          }`}
+        >
+          Owners
         </button>
       </div>
 
@@ -340,6 +385,132 @@ export default function SettingsPage() {
               <div className="h-6 bg-[var(--secondary)] rounded w-32" />
             </div>
           )}
+        </div>
+      )}
+
+      {/* Owners Section */}
+      {activeSection === 'owners' && (
+        <div className="space-y-6">
+          {/* Add Button */}
+          <div className="flex justify-between items-center">
+            <p className="text-[var(--foreground-muted)]">
+              Add other owners to help manage your business
+            </p>
+            <button
+              onClick={() => setShowAddOwner(!showAddOwner)}
+              className="px-4 py-2 bg-[var(--accent)] text-[var(--background)] rounded-lg font-medium hover:bg-[var(--accent)]/90"
+            >
+              {showAddOwner ? 'Cancel' : '+ Add Owner'}
+            </button>
+          </div>
+
+          {/* Add Owner Form */}
+          {showAddOwner && (
+            <form onSubmit={handleAddOwner} className="bg-[var(--card)] p-6 rounded-lg border border-[var(--border)] space-y-4">
+              <h3 className="font-semibold text-lg">Add New Owner</h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-[var(--foreground-muted)] mb-1">
+                    Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={ownerForm.name}
+                    onChange={(e) => setOwnerForm({ ...ownerForm, name: e.target.value })}
+                    required
+                    placeholder="John Smith"
+                    className="w-full px-3 py-2 bg-[var(--secondary)] border border-[var(--border)] rounded-lg"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-[var(--foreground-muted)] mb-1">
+                    Email *
+                  </label>
+                  <input
+                    type="email"
+                    value={ownerForm.email}
+                    onChange={(e) => setOwnerForm({ ...ownerForm, email: e.target.value })}
+                    required
+                    placeholder="john@example.com"
+                    className="w-full px-3 py-2 bg-[var(--secondary)] border border-[var(--border)] rounded-lg"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[var(--foreground-muted)] mb-1">
+                  Temporary Password *
+                </label>
+                <input
+                  type="text"
+                  value={ownerForm.password}
+                  onChange={(e) => setOwnerForm({ ...ownerForm, password: e.target.value })}
+                  required
+                  placeholder="Create a temporary password"
+                  className="w-full px-3 py-2 bg-[var(--secondary)] border border-[var(--border)] rounded-lg"
+                />
+                <p className="text-xs text-[var(--foreground-muted)] mt-1">
+                  Share this password with the new owner. They can change it after signing in.
+                </p>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full py-2 bg-[var(--accent)] text-[var(--background)] rounded-lg font-medium hover:bg-[var(--accent)]/90 disabled:opacity-50"
+              >
+                {isSubmitting ? 'Adding...' : 'Add Owner'}
+              </button>
+            </form>
+          )}
+
+          {/* Owners List */}
+          <div className="space-y-3">
+            {!owners ? (
+              <div className="animate-pulse space-y-3">
+                {[1, 2].map((i) => (
+                  <div key={i} className="h-20 bg-[var(--card)] rounded-lg" />
+                ))}
+              </div>
+            ) : owners.length === 0 ? (
+              <div className="text-center py-12 bg-[var(--card)] rounded-lg border border-[var(--border)]">
+                <p className="text-lg font-medium">No owners found</p>
+              </div>
+            ) : (
+              owners.map((owner) => (
+                <div
+                  key={owner._id}
+                  className="bg-[var(--card)] p-4 rounded-lg border border-[var(--border)] flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-[var(--accent)] flex items-center justify-center text-[var(--background)] font-bold text-lg">
+                      {owner.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <h3 className="font-medium flex items-center gap-2">
+                        {owner.name}
+                        {owner._id === user?._id && (
+                          <span className="text-xs px-2 py-0.5 bg-[var(--secondary)] rounded text-[var(--foreground-muted)]">
+                            You
+                          </span>
+                        )}
+                      </h3>
+                      <p className="text-sm text-[var(--foreground-muted)]">{owner.email}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-[var(--foreground-muted)]">
+                      {owner.lastLoginAt
+                        ? `Last login: ${format(new Date(owner.lastLoginAt), 'dd MMM yyyy')}`
+                        : 'Never logged in'}
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       )}
     </div>
