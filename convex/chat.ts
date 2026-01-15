@@ -232,6 +232,79 @@ export const toggleReaction = mutation({
   },
 });
 
+// Edit a message (within 15 min window)
+export const editMessage = mutation({
+  args: {
+    userId: v.id("users"),
+    messageId: v.id("chatMessages"),
+    content: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error("User not found");
+
+    const message = await ctx.db.get(args.messageId);
+    if (!message) throw new Error("Message not found");
+
+    // Must be sender
+    if (message.senderId !== args.userId) {
+      throw new Error("Can only edit your own messages");
+    }
+
+    // Check 15 minute window
+    const fifteenMinutes = 15 * 60 * 1000;
+    if (Date.now() - message.createdAt > fifteenMinutes) {
+      throw new Error("Edit window has expired (15 minutes)");
+    }
+
+    // Cannot edit deleted messages
+    if (message.isDeleted) {
+      throw new Error("Cannot edit a deleted message");
+    }
+
+    await ctx.db.patch(args.messageId, {
+      content: args.content,
+      editedAt: Date.now(),
+    });
+
+    return { success: true };
+  },
+});
+
+// Delete a message (within 15 min window)
+export const deleteMessage = mutation({
+  args: {
+    userId: v.id("users"),
+    messageId: v.id("chatMessages"),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error("User not found");
+
+    const message = await ctx.db.get(args.messageId);
+    if (!message) throw new Error("Message not found");
+
+    // Must be sender
+    if (message.senderId !== args.userId) {
+      throw new Error("Can only delete your own messages");
+    }
+
+    // Check 15 minute window
+    const fifteenMinutes = 15 * 60 * 1000;
+    if (Date.now() - message.createdAt > fifteenMinutes) {
+      throw new Error("Delete window has expired (15 minutes)");
+    }
+
+    await ctx.db.patch(args.messageId, {
+      isDeleted: true,
+      content: "", // Clear content
+      attachments: [], // Clear attachments
+    });
+
+    return { success: true };
+  },
+});
+
 // Create a DM channel or get existing one
 export const getOrCreateDM = mutation({
   args: {
