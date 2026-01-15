@@ -30,6 +30,7 @@ export default function JobDetailPage() {
   const allocateWorker = useMutation(api.jobs.allocateWorker);
   const removeAllocation = useMutation(api.jobs.removeAllocation);
   const createQuickWorker = useMutation(api.workers.createQuick);
+  const updateJob = useMutation(api.jobs.update);
 
   // Worker allocation state
   const [showAddWorker, setShowAddWorker] = useState(false);
@@ -47,6 +48,23 @@ export default function JobDetailPage() {
   });
   const [isAllocating, setIsAllocating] = useState(false);
   const [allocationError, setAllocationError] = useState('');
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+
+  const handleStatusChange = async (newStatus: string) => {
+    if (!user || !job) return;
+    setIsUpdatingStatus(true);
+    try {
+      await updateJob({
+        userId: user._id,
+        jobId: jobId as Id<"jobs">,
+        status: newStatus as "pending" | "active" | "onHold" | "completed" | "invoiced",
+      });
+    } catch (err) {
+      console.error('Failed to update status:', err);
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
 
   // Get workers not already allocated to this job
   const availableWorkers = workers?.filter(
@@ -148,9 +166,18 @@ export default function JobDetailPage() {
           <h1 className="text-3xl font-bold mt-2">{job.name}</h1>
           <p className="text-[var(--foreground-muted)]">{job.siteAddress}</p>
         </div>
-        <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusColors[job.status]}`}>
-          {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
-        </span>
+        <select
+          value={job.status}
+          onChange={(e) => handleStatusChange(e.target.value)}
+          disabled={isUpdatingStatus}
+          className={`px-3 py-2 rounded-lg text-sm font-medium border-0 cursor-pointer ${statusColors[job.status]} ${isUpdatingStatus ? 'opacity-50' : ''}`}
+        >
+          <option value="pending">Pending</option>
+          <option value="active">Active</option>
+          <option value="onHold">On Hold</option>
+          <option value="completed">Completed</option>
+          <option value="invoiced">Invoiced</option>
+        </select>
       </div>
 
       {/* Key Info Cards */}
