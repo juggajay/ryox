@@ -50,11 +50,23 @@ export const create = mutation({
       // For contract jobs, use quoted price
       amount = job.quotedPrice || 0;
     } else {
-      // For labour hire, calculate from timesheets
+      // For labour hire, calculate from timesheets using allocation rates
       for (const ts of timesheets) {
-        const worker = await ctx.db.get(ts.workerId);
-        if (worker) {
-          amount += ts.totalHours * worker.chargeOutRate;
+        // Get the allocation for this worker on this job to find the rate
+        const allocation = await ctx.db
+          .query("allocations")
+          .withIndex("by_job", (q) => q.eq("jobId", args.jobId))
+          .filter((q) => q.eq(q.field("workerId"), ts.workerId))
+          .first();
+
+        if (allocation) {
+          amount += ts.totalHours * allocation.chargeOutRate;
+        } else {
+          // Fallback to worker default rate if no allocation
+          const worker = await ctx.db.get(ts.workerId);
+          if (worker && worker.chargeOutRate) {
+            amount += ts.totalHours * worker.chargeOutRate;
+          }
         }
       }
     }

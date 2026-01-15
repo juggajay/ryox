@@ -5,7 +5,7 @@ import { useQuery, useMutation } from "convex/react";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "../../../../convex/_generated/api";
 
-function InviteWorkerModal({
+function InviteModal({
   isOpen,
   onClose,
 }: {
@@ -16,9 +16,8 @@ function InviteWorkerModal({
   const createInvite = useMutation(api.workerInvites.createInvite);
 
   const [formData, setFormData] = useState({
+    role: "worker" as "worker" | "owner",
     email: "",
-    payRate: "",
-    chargeOutRate: "",
     employmentType: "employee" as "employee" | "subcontractor",
     tradeClassification: "qualified" as
       | "apprentice"
@@ -41,10 +40,9 @@ function InviteWorkerModal({
       const result = await createInvite({
         createdBy: user._id,
         email: formData.email || undefined,
-        payRate: parseFloat(formData.payRate),
-        chargeOutRate: parseFloat(formData.chargeOutRate),
-        employmentType: formData.employmentType,
-        tradeClassification: formData.tradeClassification,
+        role: formData.role,
+        employmentType: formData.role === "worker" ? formData.employmentType : undefined,
+        tradeClassification: formData.role === "worker" ? formData.tradeClassification : undefined,
       });
 
       const link = `${window.location.origin}/invite/${result.token}`;
@@ -62,9 +60,8 @@ function InviteWorkerModal({
 
   const handleClose = () => {
     setFormData({
+      role: "worker",
       email: "",
-      payRate: "",
-      chargeOutRate: "",
       employmentType: "employee",
       tradeClassification: "qualified",
     });
@@ -92,13 +89,13 @@ function InviteWorkerModal({
         </button>
 
         <h2 className="text-xl font-semibold mb-6" style={{ fontFamily: "var(--font-display)" }}>
-          Invite Worker
+          Invite Team Member
         </h2>
 
         {inviteLink ? (
           <div>
             <p className="text-[var(--foreground-muted)] mb-4">
-              Share this link with your worker to let them create their account:
+              Share this link with your {formData.role === "owner" ? "new owner" : "worker"} to let them create their account:
             </p>
             <div className="bg-[var(--background)] border border-[var(--border)] rounded-lg p-3 mb-4">
               <p className="text-sm break-all font-mono">{inviteLink}</p>
@@ -116,77 +113,64 @@ function InviteWorkerModal({
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
-                Worker Email (optional)
+                Role
+              </label>
+              <select
+                value={formData.role}
+                onChange={(e) => setFormData({ ...formData, role: e.target.value as "worker" | "owner" })}
+                className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
+              >
+                <option value="worker">Worker</option>
+                <option value="owner">Owner</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
+                Email (optional)
               </label>
               <input
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
-                placeholder="worker@example.com"
+                placeholder="email@example.com"
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
-                  Pay Rate ($/hr)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.payRate}
-                  onChange={(e) => setFormData({ ...formData, payRate: e.target.value })}
-                  className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
-                  placeholder="45.00"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
-                  Charge Out Rate ($/hr)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.chargeOutRate}
-                  onChange={(e) => setFormData({ ...formData, chargeOutRate: e.target.value })}
-                  className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
-                  placeholder="75.00"
-                  required
-                />
-              </div>
-            </div>
+            {formData.role === "worker" && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
+                    Employment Type
+                  </label>
+                  <select
+                    value={formData.employmentType}
+                    onChange={(e) => setFormData({ ...formData, employmentType: e.target.value as "employee" | "subcontractor" })}
+                    className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
+                  >
+                    <option value="employee">Employee</option>
+                    <option value="subcontractor">Subcontractor</option>
+                  </select>
+                </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
-                Employment Type
-              </label>
-              <select
-                value={formData.employmentType}
-                onChange={(e) => setFormData({ ...formData, employmentType: e.target.value as any })}
-                className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
-              >
-                <option value="employee">Employee</option>
-                <option value="subcontractor">Subcontractor</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
-                Trade Classification
-              </label>
-              <select
-                value={formData.tradeClassification}
-                onChange={(e) => setFormData({ ...formData, tradeClassification: e.target.value as any })}
-                className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
-              >
-                <option value="apprentice">Apprentice</option>
-                <option value="qualified">Qualified Carpenter</option>
-                <option value="leadingHand">Leading Hand</option>
-                <option value="foreman">Foreman</option>
-              </select>
-            </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
+                    Trade Classification
+                  </label>
+                  <select
+                    value={formData.tradeClassification}
+                    onChange={(e) => setFormData({ ...formData, tradeClassification: e.target.value as "apprentice" | "qualified" | "leadingHand" | "foreman" })}
+                    className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
+                  >
+                    <option value="apprentice">Apprentice</option>
+                    <option value="qualified">Qualified Carpenter</option>
+                    <option value="leadingHand">Leading Hand</option>
+                    <option value="foreman">Foreman</option>
+                  </select>
+                </div>
+              </>
+            )}
 
             {error && (
               <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-lg text-sm">
@@ -253,11 +237,15 @@ export default function WorkersPage() {
                       {invite.email || "No email specified"}
                     </p>
                     <p className="text-sm text-[var(--foreground-muted)]">
-                      {tradeLabels[invite.tradeClassification]} • ${invite.payRate}/hr
+                      {invite.role === "owner" ? "Owner" : tradeLabels[invite.tradeClassification || "qualified"]}
                     </p>
                   </div>
-                  <span className="text-xs px-2 py-1 rounded-full bg-[var(--accent)]/10 text-[var(--accent)]">
-                    Pending
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    invite.role === "owner"
+                      ? "bg-purple-500/10 text-purple-400"
+                      : "bg-[var(--accent)]/10 text-[var(--accent)]"
+                  }`}>
+                    {invite.role === "owner" ? "Owner Invite" : "Worker Invite"}
                   </span>
                 </li>
               ))}
@@ -310,15 +298,7 @@ export default function WorkersPage() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-6">
-                <div className="text-right">
-                  <p className="text-sm text-[var(--foreground-muted)]">Pay Rate</p>
-                  <p className="font-semibold">${worker.payRate}/hr</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm text-[var(--foreground-muted)]">Charge Out</p>
-                  <p className="font-semibold">${worker.chargeOutRate}/hr</p>
-                </div>
+              <div className="flex items-center gap-4">
                 <span
                   className={`text-xs px-3 py-1 rounded-full ${
                     worker.status === "active"
@@ -334,7 +314,7 @@ export default function WorkersPage() {
         </div>
       )}
 
-      <InviteWorkerModal
+      <InviteModal
         isOpen={showInviteModal}
         onClose={() => setShowInviteModal(false)}
       />

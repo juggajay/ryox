@@ -66,15 +66,23 @@ export const list = query({
         const totalHours = timesheets.reduce((sum, t) => sum + t.totalHours, 0);
         const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
 
-        // Calculate labour cost and revenue
+        // Calculate labour cost and revenue using allocation rates
         let labourCost = 0;
         let labourRevenue = 0;
 
         for (const ts of timesheets) {
-          const worker = workers.find((w) => w?._id === ts.workerId);
-          if (worker) {
-            labourCost += ts.totalHours * worker.payRate;
-            labourRevenue += ts.totalHours * worker.chargeOutRate;
+          // Find the allocation for this worker to get the rates
+          const allocation = allocations.find((a) => a.workerId === ts.workerId);
+          if (allocation) {
+            labourCost += ts.totalHours * allocation.payRate;
+            labourRevenue += ts.totalHours * allocation.chargeOutRate;
+          } else {
+            // Fallback to worker default rates if no allocation found
+            const worker = workers.find((w) => w?._id === ts.workerId);
+            if (worker) {
+              labourCost += ts.totalHours * (worker.payRate || 0);
+              labourRevenue += ts.totalHours * (worker.chargeOutRate || 0);
+            }
           }
         }
 
@@ -149,10 +157,18 @@ export const get = query({
     let labourRevenue = 0;
 
     for (const ts of timesheets) {
-      const worker = workers.find((w) => w?._id === ts.workerId);
-      if (worker) {
-        labourCost += ts.totalHours * worker.payRate;
-        labourRevenue += ts.totalHours * worker.chargeOutRate;
+      // Find the allocation for this worker to get the rates
+      const allocation = allocations.find((a) => a.workerId === ts.workerId);
+      if (allocation) {
+        labourCost += ts.totalHours * allocation.payRate;
+        labourRevenue += ts.totalHours * allocation.chargeOutRate;
+      } else {
+        // Fallback to worker default rates
+        const worker = workers.find((w) => w?._id === ts.workerId);
+        if (worker) {
+          labourCost += ts.totalHours * (worker.payRate || 0);
+          labourRevenue += ts.totalHours * (worker.chargeOutRate || 0);
+        }
       }
     }
 
@@ -287,6 +303,8 @@ export const allocateWorker = mutation({
     startDate: v.number(),
     endDate: v.optional(v.number()),
     allocationType: v.union(v.literal("fullTime"), v.literal("partial")),
+    payRate: v.number(),
+    chargeOutRate: v.number(),
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -322,6 +340,8 @@ export const allocateWorker = mutation({
       startDate: args.startDate,
       endDate: args.endDate,
       allocationType: args.allocationType,
+      payRate: args.payRate,
+      chargeOutRate: args.chargeOutRate,
       notes: args.notes,
       createdAt: Date.now(),
     });

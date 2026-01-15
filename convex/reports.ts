@@ -90,12 +90,32 @@ export const getProfitability = query({
 
     const workerRates = new Map(workers.map((w) => [w._id, w]));
 
+    // Get allocations for rate lookup
+    const allocations = await ctx.db
+      .query("allocations")
+      .filter((q) =>
+        q.or(
+          ...timesheets.map((ts) => q.eq(q.field("workerId"), ts.workerId))
+        )
+      )
+      .collect();
+
     for (const ts of timesheets) {
-      const worker = workerRates.get(ts.workerId);
-      if (worker) {
-        totalLabourCost += ts.totalHours * worker.payRate;
-        totalHours += ts.totalHours;
+      // Try to get rate from allocation first
+      const allocation = allocations.find(
+        (a) => a.workerId === ts.workerId
+      );
+
+      if (allocation) {
+        totalLabourCost += ts.totalHours * allocation.payRate;
+      } else {
+        // Fallback to worker default rate
+        const worker = workerRates.get(ts.workerId);
+        if (worker && worker.payRate) {
+          totalLabourCost += ts.totalHours * worker.payRate;
+        }
       }
+      totalHours += ts.totalHours;
     }
 
     totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
@@ -145,15 +165,26 @@ export const getProfitability = query({
         const jobTimesheets = timesheets.filter((t) => t.jobId === job._id);
         const jobExpenses = expenses.filter((e) => e.jobId === job._id);
 
+        // Get allocations for this job
+        const jobAllocations = await ctx.db
+          .query("allocations")
+          .withIndex("by_job", (q) => q.eq("jobId", job._id))
+          .collect();
+
         let jobHours = 0;
         let jobLabourCost = 0;
 
         for (const ts of jobTimesheets) {
-          const worker = workerRates.get(ts.workerId);
-          if (worker) {
-            jobHours += ts.totalHours;
-            jobLabourCost += ts.totalHours * worker.payRate;
+          const allocation = jobAllocations.find((a) => a.workerId === ts.workerId);
+          if (allocation) {
+            jobLabourCost += ts.totalHours * allocation.payRate;
+          } else {
+            const worker = workerRates.get(ts.workerId);
+            if (worker && worker.payRate) {
+              jobLabourCost += ts.totalHours * worker.payRate;
+            }
           }
+          jobHours += ts.totalHours;
         }
 
         const jobExpenseTotal = jobExpenses.reduce((sum, e) => sum + e.amount, 0);
@@ -236,8 +267,9 @@ export const getUtilization = query({
       const totalHours = workerTimesheets.reduce((sum, t) => sum + t.totalHours, 0);
       const availableHours = weeksInPeriod * hoursPerWeek;
       const utilizationRate = availableHours > 0 ? (totalHours / availableHours) * 100 : 0;
-      const revenue = totalHours * worker.chargeOutRate;
-      const cost = totalHours * worker.payRate;
+      // Use default rates if available, otherwise 0
+      const revenue = totalHours * (worker.chargeOutRate || 0);
+      const cost = totalHours * (worker.payRate || 0);
       const margin = revenue - cost;
 
       return {

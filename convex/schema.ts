@@ -51,8 +51,9 @@ export default defineSchema({
       v.literal("leadingHand"),
       v.literal("foreman")
     ),
-    payRate: v.number(),
-    chargeOutRate: v.number(),
+    // Default rates (optional) - actual rates set per job allocation
+    payRate: v.optional(v.number()),
+    chargeOutRate: v.optional(v.number()),
     startDate: v.number(),
     status: v.union(v.literal("active"), v.literal("inactive")),
     createdAt: v.number(),
@@ -70,20 +71,20 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_worker", ["workerId"]),
 
-  // Worker Invites (for invite link system)
+  // Invites (for invite link system - workers and owners)
   workerInvites: defineTable({
     organizationId: v.id("organizations"),
     token: v.string(),
     email: v.optional(v.string()),
-    payRate: v.number(),
-    chargeOutRate: v.number(),
-    employmentType: v.union(v.literal("employee"), v.literal("subcontractor")),
-    tradeClassification: v.union(
+    role: v.union(v.literal("worker"), v.literal("owner")),
+    // Worker-specific fields (optional, only for worker invites)
+    employmentType: v.optional(v.union(v.literal("employee"), v.literal("subcontractor"))),
+    tradeClassification: v.optional(v.union(
       v.literal("apprentice"),
       v.literal("qualified"),
       v.literal("leadingHand"),
       v.literal("foreman")
-    ),
+    )),
     status: v.union(
       v.literal("pending"),
       v.literal("accepted"),
@@ -160,6 +161,9 @@ export default defineSchema({
     startDate: v.number(),
     endDate: v.optional(v.number()),
     allocationType: v.union(v.literal("fullTime"), v.literal("partial")),
+    // Rates are set per job allocation
+    payRate: v.number(),
+    chargeOutRate: v.number(),
     notes: v.optional(v.string()),
     createdAt: v.number(),
   })

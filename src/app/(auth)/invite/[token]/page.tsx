@@ -59,17 +59,20 @@ export default function InvitePage() {
     setIsLoading(true);
 
     try {
+      const isWorker = invite?.role === "worker";
+
       await acceptInvite({
         token,
         name: formData.name,
         email: formData.email,
-        phone: formData.phone,
         password: formData.password,
-        emergencyContact: {
+        // Only include worker fields for worker invites
+        phone: isWorker ? formData.phone : undefined,
+        emergencyContact: isWorker ? {
           name: formData.emergencyContactName,
           phone: formData.emergencyContactPhone,
           relationship: formData.emergencyContactRelationship,
-        },
+        } : undefined,
       });
 
       // Store user ID and redirect
@@ -168,7 +171,7 @@ export default function InvitePage() {
             <span className="font-semibold text-[var(--accent)]">
               {invite.organizationName}
             </span>{" "}
-            as a {tradeLabels[invite.tradeClassification]}
+            as {invite.role === "owner" ? "an Owner" : `a ${tradeLabels[invite.tradeClassification || "qualified"]}`}
           </p>
         </div>
 
@@ -209,7 +212,7 @@ export default function InvitePage() {
                 />
               </div>
 
-              <div className="col-span-2 sm:col-span-1">
+              <div className={invite.role === "worker" ? "col-span-2 sm:col-span-1" : "col-span-2"}>
                 <label
                   htmlFor="email"
                   className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]"
@@ -228,93 +231,99 @@ export default function InvitePage() {
                 />
               </div>
 
-              <div className="col-span-2 sm:col-span-1">
-                <label
-                  htmlFor="phone"
-                  className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]"
-                >
-                  Phone
-                </label>
-                <input
-                  id="phone"
-                  name="phone"
-                  type="tel"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-colors text-[var(--foreground)]"
-                  placeholder="0400 123 456"
-                  required
-                />
-              </div>
+              {invite.role === "worker" && (
+                <div className="col-span-2 sm:col-span-1">
+                  <label
+                    htmlFor="phone"
+                    className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]"
+                  >
+                    Phone
+                  </label>
+                  <input
+                    id="phone"
+                    name="phone"
+                    type="tel"
+                    value={formData.phone}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-colors text-[var(--foreground)]"
+                    placeholder="0400 123 456"
+                    required
+                  />
+                </div>
+              )}
             </div>
 
-            {/* Emergency Contact */}
-            <div className="pt-2">
-              <div className="text-xs uppercase tracking-wider text-[var(--foreground-muted)] mb-3 flex items-center gap-2">
-                <div className="h-px flex-1 bg-[var(--border)]" />
-                <span>Emergency Contact</span>
-                <div className="h-px flex-1 bg-[var(--border)]" />
-              </div>
-            </div>
+            {/* Emergency Contact - Only for workers */}
+            {invite.role === "worker" && (
+              <>
+                <div className="pt-2">
+                  <div className="text-xs uppercase tracking-wider text-[var(--foreground-muted)] mb-3 flex items-center gap-2">
+                    <div className="h-px flex-1 bg-[var(--border)]" />
+                    <span>Emergency Contact</span>
+                    <div className="h-px flex-1 bg-[var(--border)]" />
+                  </div>
+                </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2 sm:col-span-1">
-                <label
-                  htmlFor="emergencyContactName"
-                  className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]"
-                >
-                  Contact Name
-                </label>
-                <input
-                  id="emergencyContactName"
-                  name="emergencyContactName"
-                  type="text"
-                  value={formData.emergencyContactName}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-colors text-[var(--foreground)]"
-                  placeholder="Jane Smith"
-                  required
-                />
-              </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2 sm:col-span-1">
+                    <label
+                      htmlFor="emergencyContactName"
+                      className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]"
+                    >
+                      Contact Name
+                    </label>
+                    <input
+                      id="emergencyContactName"
+                      name="emergencyContactName"
+                      type="text"
+                      value={formData.emergencyContactName}
+                      onChange={handleChange}
+                      className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-colors text-[var(--foreground)]"
+                      placeholder="Jane Smith"
+                      required
+                    />
+                  </div>
 
-              <div className="col-span-2 sm:col-span-1">
-                <label
-                  htmlFor="emergencyContactPhone"
-                  className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]"
-                >
-                  Contact Phone
-                </label>
-                <input
-                  id="emergencyContactPhone"
-                  name="emergencyContactPhone"
-                  type="tel"
-                  value={formData.emergencyContactPhone}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-colors text-[var(--foreground)]"
-                  placeholder="0400 987 654"
-                  required
-                />
-              </div>
+                  <div className="col-span-2 sm:col-span-1">
+                    <label
+                      htmlFor="emergencyContactPhone"
+                      className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]"
+                    >
+                      Contact Phone
+                    </label>
+                    <input
+                      id="emergencyContactPhone"
+                      name="emergencyContactPhone"
+                      type="tel"
+                      value={formData.emergencyContactPhone}
+                      onChange={handleChange}
+                      className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-colors text-[var(--foreground)]"
+                      placeholder="0400 987 654"
+                      required
+                    />
+                  </div>
 
-              <div className="col-span-2">
-                <label
-                  htmlFor="emergencyContactRelationship"
-                  className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]"
-                >
-                  Relationship
-                </label>
-                <input
-                  id="emergencyContactRelationship"
-                  name="emergencyContactRelationship"
-                  type="text"
-                  value={formData.emergencyContactRelationship}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-colors text-[var(--foreground)]"
-                  placeholder="Partner, Parent, etc."
-                  required
-                />
-              </div>
-            </div>
+                  <div className="col-span-2">
+                    <label
+                      htmlFor="emergencyContactRelationship"
+                      className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]"
+                    >
+                      Relationship
+                    </label>
+                    <input
+                      id="emergencyContactRelationship"
+                      name="emergencyContactRelationship"
+                      type="text"
+                      value={formData.emergencyContactRelationship}
+                      onChange={handleChange}
+                      className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] transition-colors text-[var(--foreground)]"
+                      placeholder="Partner, Parent, etc."
+                      required
+                    />
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Password */}
             <div className="pt-2">

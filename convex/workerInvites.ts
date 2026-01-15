@@ -12,26 +12,33 @@ function generateToken(): string {
   return token;
 }
 
-// Create worker invite
+// Create invite (worker or owner)
 export const createInvite = mutation({
   args: {
     createdBy: v.id("users"),
     email: v.optional(v.string()),
-    payRate: v.number(),
-    chargeOutRate: v.number(),
-    employmentType: v.union(v.literal("employee"), v.literal("subcontractor")),
-    tradeClassification: v.union(
+    role: v.union(v.literal("worker"), v.literal("owner")),
+    // Worker-specific fields (optional)
+    employmentType: v.optional(v.union(v.literal("employee"), v.literal("subcontractor"))),
+    tradeClassification: v.optional(v.union(
       v.literal("apprentice"),
       v.literal("qualified"),
       v.literal("leadingHand"),
       v.literal("foreman")
-    ),
+    )),
   },
   handler: async (ctx, args) => {
     // Verify creator is an owner
     const creator = await ctx.db.get(args.createdBy);
     if (!creator || creator.role !== "owner") {
-      throw new Error("Only owners can create worker invites");
+      throw new Error("Only owners can create invites");
+    }
+
+    // For worker invites, require employment type and trade classification
+    if (args.role === "worker") {
+      if (!args.employmentType || !args.tradeClassification) {
+        throw new Error("Employment type and trade classification are required for worker invites");
+      }
     }
 
     const token = generateToken();
@@ -42,8 +49,7 @@ export const createInvite = mutation({
       organizationId: creator.organizationId,
       token,
       email: args.email?.toLowerCase(),
-      payRate: args.payRate,
-      chargeOutRate: args.chargeOutRate,
+      role: args.role,
       employmentType: args.employmentType,
       tradeClassification: args.tradeClassification,
       status: "pending",
@@ -84,19 +90,20 @@ export const getInviteByToken = query({
   },
 });
 
-// Accept invite and create worker profile + user account
+// Accept invite and create user account (worker or owner)
 export const acceptInvite = mutation({
   args: {
     token: v.string(),
     name: v.string(),
     email: v.string(),
-    phone: v.string(),
     password: v.string(),
-    emergencyContact: v.object({
+    // Worker-specific fields (optional, only for worker invites)
+    phone: v.optional(v.string()),
+    emergencyContact: v.optional(v.object({
       name: v.string(),
       phone: v.string(),
       relationship: v.string(),
-    }),
+    })),
   },
   handler: async (ctx, args) => {
     // Get and validate invite
@@ -129,6 +136,13 @@ export const acceptInvite = mutation({
       throw new Error("Email already registered");
     }
 
+    // For worker invites, require phone and emergency contact
+    if (invite.role === "worker") {
+      if (!args.phone || !args.emergencyContact) {
+        throw new Error("Phone and emergency contact are required for worker accounts");
+      }
+    }
+
     // Hash password
     const encoder = new TextEncoder();
     const data = encoder.encode(args.password);
@@ -138,37 +152,50 @@ export const acceptInvite = mutation({
       .join("");
 
     const now = Date.now();
+    let userId: any;
+    let workerId: any = undefined;
 
-    // Create worker profile
-    const workerId = await ctx.db.insert("workers", {
-      organizationId: invite.organizationId,
-      name: args.name,
-      phone: args.phone,
-      email: args.email.toLowerCase(),
-      emergencyContact: args.emergencyContact,
-      employmentType: invite.employmentType,
-      tradeClassification: invite.tradeClassification,
-      payRate: invite.payRate,
-      chargeOutRate: invite.chargeOutRate,
-      startDate: now,
-      status: "active",
-      createdAt: now,
-    });
+    if (invite.role === "worker") {
+      // Create worker profile
+      workerId = await ctx.db.insert("workers", {
+        organizationId: invite.organizationId,
+        name: args.name,
+        phone: args.phone!,
+        email: args.email.toLowerCase(),
+        emergencyContact: args.emergencyContact!,
+        employmentType: invite.employmentType!,
+        tradeClassification: invite.tradeClassification!,
+        startDate: now,
+        status: "active",
+        createdAt: now,
+      });
 
-    // Create user account linked to worker
-    const userId = await ctx.db.insert("users", {
-      email: args.email.toLowerCase(),
-      name: args.name,
-      passwordHash,
-      role: "worker",
-      organizationId: invite.organizationId,
-      workerId,
-      createdAt: now,
-      lastLoginAt: now,
-    });
+      // Create user account linked to worker
+      userId = await ctx.db.insert("users", {
+        email: args.email.toLowerCase(),
+        name: args.name,
+        passwordHash,
+        role: "worker",
+        organizationId: invite.organizationId,
+        workerId,
+        createdAt: now,
+        lastLoginAt: now,
+      });
 
-    // Link worker to user
-    await ctx.db.patch(workerId, { userId });
+      // Link worker to user
+      await ctx.db.patch(workerId, { userId });
+    } else {
+      // Create owner user account
+      userId = await ctx.db.insert("users", {
+        email: args.email.toLowerCase(),
+        name: args.name,
+        passwordHash,
+        role: "owner",
+        organizationId: invite.organizationId,
+        createdAt: now,
+        lastLoginAt: now,
+      });
+    }
 
     // Update invite status
     await ctx.db.patch(invite._id, {
@@ -177,7 +204,7 @@ export const acceptInvite = mutation({
       acceptedBy: userId,
     });
 
-    // Add worker to company chat channel
+    // Add user to company chat channel
     const companyChannel = await ctx.db
       .query("chatChannels")
       .withIndex("by_organization", (q) =>
