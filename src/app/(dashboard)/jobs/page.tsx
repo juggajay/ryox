@@ -41,18 +41,21 @@ function CreateJobModal({
     paymentTerms: "30",
   });
   const [isCreatingBuilder, setIsCreatingBuilder] = useState(false);
+  const [quickAddedBuilder, setQuickAddedBuilder] = useState<{ id: string; name: string } | null>(null);
 
   const handleQuickAddBuilder = async () => {
     if (!user) return;
     setIsCreatingBuilder(true);
     try {
+      const builderName = builderFormData.companyName;
       const newBuilderId = await createBuilder({
         userId: user._id,
-        companyName: builderFormData.companyName,
+        companyName: builderName,
         abn: builderFormData.abn || "N/A",
         paymentTerms: parseInt(builderFormData.paymentTerms) || 30,
       });
       setFormData({ ...formData, builderId: newBuilderId });
+      setQuickAddedBuilder({ id: newBuilderId, name: builderName });
       setShowQuickAddBuilder(false);
       setBuilderFormData({ companyName: "", abn: "", paymentTerms: "30" });
     } catch (err) {
@@ -108,6 +111,7 @@ function CreateJobModal({
     });
     setShowQuickAddBuilder(false);
     setBuilderFormData({ companyName: "", abn: "", paymentTerms: "30" });
+    setQuickAddedBuilder(null);
     setError("");
     onClose();
   };
@@ -139,10 +143,35 @@ function CreateJobModal({
             <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
               Builder
             </label>
+
+            {/* Success message when builder was just created */}
+            {quickAddedBuilder && formData.builderId === quickAddedBuilder.id && (
+              <div className="mb-3 p-3 bg-green-500/10 border border-green-500/30 rounded-lg flex items-center gap-2">
+                <svg className="w-5 h-5 text-green-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="text-sm text-green-400">
+                  Builder &quot;{quickAddedBuilder.name}&quot; created and selected
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setQuickAddedBuilder(null)}
+                  className="ml-auto text-green-400/60 hover:text-green-400"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            )}
+
             <div className="flex gap-2">
               <select
                 value={formData.builderId}
-                onChange={(e) => setFormData({ ...formData, builderId: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, builderId: e.target.value });
+                  setQuickAddedBuilder(null);
+                }}
                 className="flex-1 px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
                 required
               >
@@ -152,26 +181,42 @@ function CreateJobModal({
                     {builder.companyName}
                   </option>
                 ))}
+                {/* Show quick-added builder if not yet in the list */}
+                {quickAddedBuilder && !builders?.some(b => b._id === quickAddedBuilder.id) && (
+                  <option value={quickAddedBuilder.id}>
+                    {quickAddedBuilder.name}
+                  </option>
+                )}
               </select>
               <button
                 type="button"
                 onClick={() => setShowQuickAddBuilder(!showQuickAddBuilder)}
-                className="px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg hover:border-[var(--accent)] text-[var(--foreground-muted)] hover:text-[var(--foreground)] transition-colors whitespace-nowrap"
+                className="px-4 py-3 bg-[var(--accent)]/10 border border-[var(--accent)]/50 rounded-lg hover:bg-[var(--accent)]/20 hover:border-[var(--accent)] text-[var(--accent)] transition-colors whitespace-nowrap font-medium"
               >
-                + New
+                + New Builder
               </button>
             </div>
 
+            {!builders?.length && !showQuickAddBuilder && !quickAddedBuilder && (
+              <p className="mt-2 text-sm text-[var(--foreground-muted)]">
+                No builders yet? Click &quot;+ New Builder&quot; to add one quickly.
+              </p>
+            )}
+
             {/* Quick Add Builder Form */}
             {showQuickAddBuilder && (
-              <div className="mt-3 p-4 bg-[var(--background)] border border-[var(--accent)]/30 rounded-lg space-y-3">
+              <div className="mt-3 p-4 bg-[var(--accent)]/5 border border-[var(--accent)]/30 rounded-lg space-y-3">
                 <p className="text-sm font-medium text-[var(--accent)]">Quick Add Builder</p>
+                <p className="text-xs text-[var(--foreground-muted)]">
+                  Add basic details now, you can update the rest later in Builders.
+                </p>
                 <input
                   type="text"
                   value={builderFormData.companyName}
                   onChange={(e) => setBuilderFormData({ ...builderFormData, companyName: e.target.value })}
                   className="w-full px-3 py-2 bg-[var(--card)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)] text-sm"
                   placeholder="Company name *"
+                  autoFocus
                 />
                 <div className="grid grid-cols-2 gap-3">
                   <input
