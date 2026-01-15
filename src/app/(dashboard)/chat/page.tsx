@@ -4,8 +4,10 @@ import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import { useAuth } from '@/lib/auth-context';
 import { useState, useEffect, useRef } from 'react';
-import { format } from 'date-fns';
 import { Id } from '../../../../convex/_generated/dataModel';
+import { ChatMessage } from '@/components/chat/ChatMessage';
+import { MentionInput } from '@/components/chat/MentionInput';
+import { FileUpload } from '@/components/chat/FileUpload';
 
 export default function ChatPage() {
   const { user } = useAuth();
@@ -13,8 +15,13 @@ export default function ChatPage() {
   const [messageInput, setMessageInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [showMobileMessages, setShowMobileMessages] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<Array<{
+    url: string;
+    type: 'image' | 'file';
+    name: string;
+    size: number;
+  }>>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   // Queries
   const channels = useQuery(api.chat.listChannels,
@@ -70,9 +77,9 @@ export default function ChatPage() {
     setShowMobileMessages(false);
   };
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user || !selectedChannelId || !messageInput.trim()) return;
+  const handleSendMessage = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!user || !selectedChannelId || (!messageInput.trim() && pendingAttachments.length === 0)) return;
 
     setIsSending(true);
     try {
@@ -80,10 +87,10 @@ export default function ChatPage() {
         userId: user._id,
         channelId: selectedChannelId,
         content: messageInput.trim(),
+        attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined,
       });
       setMessageInput('');
-      // Keep focus on input for continuous chatting
-      inputRef.current?.focus();
+      setPendingAttachments([]);
     } catch (err) {
       console.error('Failed to send message:', err);
     } finally {
@@ -241,60 +248,59 @@ export default function ChatPage() {
                 </div>
               ) : (
                 messages.map((msg) => (
-                  <div
+                  <ChatMessage
                     key={msg._id}
-                    className={`flex ${msg.isOwnMessage ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div
-                      className={`
-                        max-w-[85%] md:max-w-[70%] rounded-2xl px-4 py-2.5
-                        ${msg.isOwnMessage
-                          ? 'bg-[var(--accent)] text-[var(--background)] rounded-br-md'
-                          : 'bg-[var(--secondary)] rounded-bl-md'
-                        }
-                      `}
-                    >
-                      {!msg.isOwnMessage && (
-                        <p className="text-xs font-medium mb-1 opacity-70">
-                          {msg.senderName}
-                        </p>
-                      )}
-                      <p className="whitespace-pre-wrap break-words text-[15px]">{msg.content}</p>
-                      <p
-                        className={`text-[10px] mt-1 ${
-                          msg.isOwnMessage ? 'opacity-70 text-right' : 'text-[var(--foreground-muted)]'
-                        }`}
-                      >
-                        {format(new Date(msg.createdAt), 'HH:mm')}
-                      </p>
-                    </div>
-                  </div>
+                    message={msg}
+                    userId={user!._id}
+                  />
                 ))
               )}
               <div ref={messagesEndRef} />
             </div>
 
+            {/* Pending attachments preview */}
+            {pendingAttachments.length > 0 && (
+              <div className="px-3 md:px-4 pt-2 flex gap-2 flex-wrap">
+                {pendingAttachments.map((att, i) => (
+                  <div key={i} className="relative group">
+                    {att.type === 'image' ? (
+                      <img src={att.url} alt={att.name} className="w-16 h-16 object-cover rounded-lg" />
+                    ) : (
+                      <div className="w-16 h-16 bg-[var(--secondary)] rounded-lg flex items-center justify-center">
+                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => setPendingAttachments(atts => atts.filter((_, idx) => idx !== i))}
+                      className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Message Input */}
             <form onSubmit={handleSendMessage} className="p-3 md:p-4 border-t border-[var(--border)] bg-[var(--card)]">
-              <div className="flex gap-2">
-                <input
-                  ref={inputRef}
-                  type="text"
+              <div className="flex gap-2 items-end">
+                <FileUpload
+                  onFilesSelected={(files) => setPendingAttachments(prev => [...prev, ...files])}
+                />
+
+                <MentionInput
                   value={messageInput}
-                  onChange={(e) => setMessageInput(e.target.value)}
-                  placeholder="Type a message..."
-                  className="
-                    flex-1 px-4 py-3
-                    bg-[var(--secondary)] border border-[var(--border)]
-                    rounded-2xl
-                    text-base
-                    focus:outline-none focus:ring-2 focus:ring-[var(--accent)]
-                  "
+                  onChange={setMessageInput}
+                  onSubmit={() => handleSendMessage()}
+                  participants={selectedChannel?.participants.filter((p): p is NonNullable<typeof p> => p !== null) || []}
                   disabled={isSending}
                 />
+
                 <button
                   type="submit"
-                  disabled={isSending || !messageInput.trim()}
+                  disabled={isSending || (!messageInput.trim() && pendingAttachments.length === 0)}
                   className="
                     p-3 md:px-6 md:py-3
                     bg-[var(--accent)] text-[var(--background)]
