@@ -111,14 +111,39 @@ export const getMessages = query({
       messages = messages.slice(-args.limit);
     }
 
-    // Enrich with sender names
+    // Enrich with sender names and reaction details
     const enriched = await Promise.all(
       messages.map(async (msg) => {
         const sender = await ctx.db.get(msg.senderId);
+
+        // Get reaction user names
+        let reactionsWithNames: { emoji: string; userId: string; userName: string }[] = [];
+        if (msg.reactions && msg.reactions.length > 0) {
+          reactionsWithNames = await Promise.all(
+            msg.reactions.map(async (r) => {
+              const u = await ctx.db.get(r.userId);
+              return {
+                emoji: r.emoji,
+                userId: r.userId,
+                userName: u?.name || "Unknown",
+              };
+            })
+          );
+        }
+
+        // Check if within edit window
+        const fifteenMinutes = 15 * 60 * 1000;
+        const canEdit = msg.senderId === args.userId &&
+                        Date.now() - msg.createdAt < fifteenMinutes &&
+                        !msg.isDeleted;
+
         return {
           ...msg,
           senderName: sender?.name || "Unknown",
           isOwnMessage: msg.senderId === args.userId,
+          reactionsWithNames,
+          canEdit,
+          readByCount: msg.readBy.length,
         };
       })
     );
@@ -501,6 +526,38 @@ export const getChannel = query({
       ...channel,
       participants: participants.filter(Boolean),
       job,
+    };
+  },
+});
+
+// Get read receipt details for a message
+export const getMessageReadBy = query({
+  args: {
+    userId: v.id("users"),
+    messageId: v.id("chatMessages"),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) return null;
+
+    const message = await ctx.db.get(args.messageId);
+    if (!message) return null;
+
+    const channel = await ctx.db.get(message.channelId);
+    if (!channel) return null;
+    if (!channel.participants.includes(args.userId)) return null;
+
+    // Get details for users who read the message
+    const readByUsers = await Promise.all(
+      message.readBy.map(async (userId) => {
+        const u = await ctx.db.get(userId);
+        return u ? { _id: u._id, name: u.name } : null;
+      })
+    );
+
+    return {
+      readBy: readByUsers.filter(Boolean),
+      totalParticipants: channel.participants.length,
     };
   },
 });
