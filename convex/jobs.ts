@@ -230,7 +230,7 @@ export const create = mutation({
     const jobId = await ctx.db.insert("jobs", {
       ...jobData,
       organizationId: user.organizationId,
-      status: "pending",
+      status: "active",
       createdAt: Date.now(),
     });
 
