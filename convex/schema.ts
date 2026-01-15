@@ -11,6 +11,25 @@ export default defineSchema({
       v.object({
         defaultPaymentTerms: v.optional(v.number()),
         timezone: v.optional(v.string()),
+        // Xero integration settings
+        xero: v.optional(
+          v.object({
+            tenantId: v.string(),
+            tenantName: v.string(),
+            accessToken: v.string(),
+            refreshToken: v.string(),
+            tokenExpiresAt: v.number(),
+            connectedAt: v.number(),
+            lastSyncAt: v.optional(v.number()),
+            accountCodes: v.optional(
+              v.object({
+                salesAccount: v.optional(v.string()),
+                labourAccount: v.optional(v.string()),
+                contractAccount: v.optional(v.string()),
+              })
+            ),
+          })
+        ),
       })
     ),
     createdAt: v.number(),
@@ -116,6 +135,9 @@ export default defineSchema({
     ),
     notes: v.optional(v.string()),
     status: v.union(v.literal("active"), v.literal("inactive")),
+    // Xero contact reference
+    xeroContactId: v.optional(v.string()),
+    xeroContactSyncedAt: v.optional(v.number()),
     createdAt: v.number(),
   }).index("by_organization", ["organizationId"]),
 
@@ -270,6 +292,10 @@ export default defineSchema({
     dueDate: v.number(),
     sentAt: v.optional(v.number()),
     paidAt: v.optional(v.number()),
+    // Xero invoice tracking
+    xeroInvoiceId: v.optional(v.string()),
+    xeroInvoiceNumber: v.optional(v.string()),
+    xeroExportedAt: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_organization", ["organizationId"])
@@ -318,4 +344,15 @@ export default defineSchema({
       vectorField: "embedding",
       dimensions: 1536,
     }),
+
+  // Xero OAuth Sessions (temporary, for PKCE flow)
+  xeroOAuthSessions: defineTable({
+    organizationId: v.id("organizations"),
+    state: v.string(),
+    codeVerifier: v.string(),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+  })
+    .index("by_state", ["state"])
+    .index("by_organization", ["organizationId"]),
 });

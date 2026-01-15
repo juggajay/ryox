@@ -1,10 +1,11 @@
 'use client';
 
-import { useQuery, useMutation } from 'convex/react';
+import { useQuery, useMutation, useAction } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import { useAuth } from '@/lib/auth-context';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
+import { useSearchParams } from 'next/navigation';
 import { Id } from '../../../../convex/_generated/dataModel';
 
 type OverheadCategory = 'vehicles' | 'insurance' | 'communications' | 'premises' | 'equipment' | 'admin' | 'other';
@@ -30,10 +31,13 @@ const frequencyLabels: Record<Frequency, string> = {
 
 export default function SettingsPage() {
   const { user } = useAuth();
-  const [activeSection, setActiveSection] = useState<'overheads' | 'organization' | 'owners'>('overheads');
+  const searchParams = useSearchParams();
+  const [activeSection, setActiveSection] = useState<'overheads' | 'organization' | 'owners' | 'integrations'>('overheads');
   const [showAddOverhead, setShowAddOverhead] = useState(false);
   const [showAddOwner, setShowAddOwner] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [xeroConnecting, setXeroConnecting] = useState(false);
+  const [xeroMessage, setXeroMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const [overheadForm, setOverheadForm] = useState({
     name: '',
@@ -47,6 +51,25 @@ export default function SettingsPage() {
     email: '',
     password: '',
   });
+
+  // Handle URL params from Xero OAuth callback
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    const success = searchParams.get('success');
+    const error = searchParams.get('error');
+
+    if (tab === 'integrations') {
+      setActiveSection('integrations');
+    }
+
+    if (success === 'connected') {
+      setXeroMessage({ type: 'success', text: 'Successfully connected to Xero!' });
+      setActiveSection('integrations');
+    } else if (error) {
+      setXeroMessage({ type: 'error', text: error });
+      setActiveSection('integrations');
+    }
+  }, [searchParams]);
 
   // Queries
   const overheads = useQuery(api.overheads.list,
@@ -65,10 +88,44 @@ export default function SettingsPage() {
     user ? { userId: user._id } : 'skip'
   );
 
+  // Xero integration queries
+  const xeroStatus = useQuery(api.xero.getConnectionStatus,
+    user ? { userId: user._id } : 'skip'
+  );
+
   // Mutations
   const addOverhead = useMutation(api.overheads.add);
   const removeOverhead = useMutation(api.overheads.remove);
   const addOwner = useMutation(api.auth.addOwner);
+
+  // Xero mutations
+  const initiateXeroOAuth = useMutation(api.xero.initiateOAuth);
+  const disconnectXero = useMutation(api.xero.disconnect);
+
+  const handleConnectXero = async () => {
+    if (!user) return;
+    setXeroConnecting(true);
+    setXeroMessage(null);
+    try {
+      const result = await initiateXeroOAuth({ userId: user._id });
+      window.location.href = result.authUrl;
+    } catch (err) {
+      console.error('Failed to initiate Xero OAuth:', err);
+      setXeroMessage({ type: 'error', text: 'Failed to connect to Xero. Please try again.' });
+      setXeroConnecting(false);
+    }
+  };
+
+  const handleDisconnectXero = async () => {
+    if (!user || !confirm('Are you sure you want to disconnect from Xero? This will remove the integration.')) return;
+    try {
+      await disconnectXero({ userId: user._id });
+      setXeroMessage({ type: 'success', text: 'Successfully disconnected from Xero.' });
+    } catch (err) {
+      console.error('Failed to disconnect Xero:', err);
+      setXeroMessage({ type: 'error', text: 'Failed to disconnect from Xero.' });
+    }
+  };
 
   const handleAddOverhead = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -174,6 +231,16 @@ export default function SettingsPage() {
           }`}
         >
           Owners
+        </button>
+        <button
+          onClick={() => setActiveSection('integrations')}
+          className={`px-4 py-2 rounded-t font-medium transition-colors ${
+            activeSection === 'integrations'
+              ? 'bg-[var(--accent)] text-[var(--background)]'
+              : 'text-[var(--foreground-muted)] hover:text-[var(--foreground)]'
+          }`}
+        >
+          Integrations
         </button>
       </div>
 
@@ -510,6 +577,166 @@ export default function SettingsPage() {
                 </div>
               ))
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Integrations Section */}
+      {activeSection === 'integrations' && (
+        <div className="space-y-6">
+          {/* Status Message */}
+          {xeroMessage && (
+            <div className={`p-4 rounded-lg border ${
+              xeroMessage.type === 'success'
+                ? 'bg-green-500/10 border-green-500/30 text-green-400'
+                : 'bg-red-500/10 border-red-500/30 text-red-400'
+            }`}>
+              <div className="flex items-center justify-between">
+                <p>{xeroMessage.text}</p>
+                <button
+                  onClick={() => setXeroMessage(null)}
+                  className="text-current hover:opacity-70"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Xero Integration Card */}
+          <div className="bg-[var(--card)] p-6 rounded-lg border border-[var(--border)]">
+            <div className="flex items-start gap-4">
+              {/* Xero Logo */}
+              <div className="w-16 h-16 bg-[#13B5EA] rounded-xl flex items-center justify-center flex-shrink-0">
+                <svg viewBox="0 0 24 24" className="w-10 h-10 text-white" fill="currentColor">
+                  <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 14.54l-2.543-2.542 2.543-2.543a.75.75 0 00-1.061-1.06l-2.543 2.542-2.542-2.543a.75.75 0 00-1.061 1.061l2.543 2.543-2.543 2.542a.75.75 0 001.06 1.061l2.543-2.543 2.543 2.543a.75.75 0 101.06-1.061z"/>
+                </svg>
+              </div>
+
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xl font-semibold">Xero</h3>
+                    <p className="text-[var(--foreground-muted)] text-sm">
+                      Connect to export invoices to your Xero account
+                    </p>
+                  </div>
+
+                  {/* Connection Status Badge */}
+                  {xeroStatus?.connected ? (
+                    <span className="px-3 py-1 rounded-full bg-green-500/20 text-green-400 text-sm font-medium">
+                      Connected
+                    </span>
+                  ) : (
+                    <span className="px-3 py-1 rounded-full bg-[var(--secondary)] text-[var(--foreground-muted)] text-sm font-medium">
+                      Not Connected
+                    </span>
+                  )}
+                </div>
+
+                {/* Connected State */}
+                {xeroStatus?.connected ? (
+                  <div className="mt-4 space-y-4">
+                    <div className="bg-[var(--secondary)] rounded-lg p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-[var(--foreground-muted)]">Organization</span>
+                        <span className="font-medium">{xeroStatus.tenantName}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-[var(--foreground-muted)]">Connected</span>
+                        <span className="text-sm">
+                          {xeroStatus.connectedAt
+                            ? format(new Date(xeroStatus.connectedAt), 'dd MMM yyyy, HH:mm')
+                            : 'Unknown'}
+                        </span>
+                      </div>
+                      {xeroStatus.tokenExpired && (
+                        <div className="flex items-center gap-2 text-amber-400 text-sm">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          <span>Token expired - reconnect required</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex gap-3">
+                      {xeroStatus.tokenExpired ? (
+                        <button
+                          onClick={handleConnectXero}
+                          disabled={xeroConnecting}
+                          className="flex-1 py-2 bg-[var(--accent)] text-[var(--background)] rounded-lg font-medium hover:bg-[var(--accent)]/90 disabled:opacity-50"
+                        >
+                          {xeroConnecting ? 'Reconnecting...' : 'Reconnect to Xero'}
+                        </button>
+                      ) : null}
+                      <button
+                        onClick={handleDisconnectXero}
+                        className="px-4 py-2 border border-red-500/50 text-red-400 rounded-lg font-medium hover:bg-red-500/10"
+                      >
+                        Disconnect
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Not Connected State */
+                  <div className="mt-4">
+                    <button
+                      onClick={handleConnectXero}
+                      disabled={xeroConnecting}
+                      className="w-full py-3 bg-[#13B5EA] text-white rounded-lg font-medium hover:bg-[#0ea5d9] disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {xeroConnecting ? (
+                        <>
+                          <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Connecting...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                          </svg>
+                          Connect to Xero
+                        </>
+                      )}
+                    </button>
+                    <p className="text-xs text-[var(--foreground-muted)] mt-2 text-center">
+                      You&apos;ll be redirected to Xero to authorize the connection
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Integration Features Info */}
+          <div className="bg-[var(--card)] p-6 rounded-lg border border-[var(--border)]">
+            <h4 className="font-semibold mb-4">What you can do with Xero integration</h4>
+            <ul className="space-y-3">
+              <li className="flex items-start gap-3">
+                <svg className="w-5 h-5 text-green-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="text-sm">Export invoices to Xero as draft invoices</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <svg className="w-5 h-5 text-green-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="text-sm">Automatically sync builder contacts to Xero</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <svg className="w-5 h-5 text-green-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="text-sm">Keep your accounting records in sync</span>
+              </li>
+            </ul>
           </div>
         </div>
       )}

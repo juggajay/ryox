@@ -22,6 +22,7 @@ import type * as testing from "../testing.js";
 import type * as timesheets from "../timesheets.js";
 import type * as workerInvites from "../workerInvites.js";
 import type * as workers from "../workers.js";
+import type * as xero from "../xero.js";
 
 import type {
   ApiFromModules,
@@ -44,6 +45,7 @@ declare const fullApi: ApiFromModules<{
   timesheets: typeof timesheets;
   workerInvites: typeof workerInvites;
   workers: typeof workers;
+  xero: typeof xero;
 }>;
 
 /**
