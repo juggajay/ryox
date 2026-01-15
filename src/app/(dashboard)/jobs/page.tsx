@@ -191,7 +191,7 @@ function CreateJobModal({
               <button
                 type="button"
                 onClick={() => setShowQuickAddBuilder(!showQuickAddBuilder)}
-                className="px-4 py-3 bg-[var(--accent)]/10 border border-[var(--accent)]/50 rounded-lg hover:bg-[var(--accent)]/20 hover:border-[var(--accent)] text-[var(--accent)] transition-colors whitespace-nowrap font-medium"
+                className="px-4 py-3 bg-[var(--accent)] text-[var(--background)] rounded-lg hover:opacity-90 transition-colors whitespace-nowrap font-medium"
               >
                 + New Builder
               </button>
