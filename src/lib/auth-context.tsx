@@ -56,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Load user ID from localStorage on mount
   useEffect(() => {
     const storedUserId = localStorage.getItem(USER_ID_KEY);
+    console.log("[AUTH] Loading from localStorage:", storedUserId);
     if (storedUserId) {
       setUserId(storedUserId as Id<"users">);
     }
@@ -70,8 +71,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Clear invalid session if user no longer exists
   useEffect(() => {
+    console.log("[AUTH] Session check - userId:", userId, "userData:", userData);
     if (userId && userData === null) {
       // User ID in localStorage but user not found in database
+      console.log("[AUTH] CLEARING SESSION - user not found in database");
       localStorage.removeItem(USER_ID_KEY);
       setUserId(null);
     }
@@ -79,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     const result = await signInMutation({ email, password });
+    console.log("[AUTH] Sign in success, storing userId:", result.userId);
     localStorage.setItem(USER_ID_KEY, result.userId);
     setUserId(result.userId);
   };
