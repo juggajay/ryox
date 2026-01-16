@@ -1,10 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
+
+// Temporary debug component
+function AuthDebug() {
+  const [debugInfo, setDebugInfo] = useState<string>("Loading...");
+  const { user, isLoading } = useAuth();
+
+  useEffect(() => {
+    const storedId = localStorage.getItem("carptrack_user_id");
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches;
+    const info = [
+      `PWA Mode: ${isStandalone ? "YES" : "NO (browser)"}`,
+      `Stored ID: ${storedId ? storedId.slice(0, 10) + "..." : "NONE"}`,
+      `Auth Loading: ${isLoading}`,
+      `User: ${user ? user.email : "null"}`,
+    ].join("\n");
+    setDebugInfo(info);
+  }, [user, isLoading]);
+
+  return (
+    <div className="fixed bottom-4 left-4 right-4 bg-black/90 border border-yellow-500 rounded-lg p-3 text-xs font-mono text-yellow-400 z-50">
+      <div className="font-bold mb-1">DEBUG (remove later):</div>
+      <pre className="whitespace-pre-wrap">{debugInfo}</pre>
+    </div>
+  );
+}
 
 export default function SignInPage() {
   const router = useRouter();
@@ -151,6 +176,9 @@ export default function SignInPage() {
           Access is by invitation only
         </p>
       </div>
+
+      {/* Temporary debug panel */}
+      <AuthDebug />
     </div>
   );
 }
