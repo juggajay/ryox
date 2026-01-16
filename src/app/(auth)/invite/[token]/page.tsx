@@ -7,6 +7,12 @@ import Image from "next/image";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../../convex/_generated/api";
 
+// Required for static export - returns empty array since invite pages
+// are accessed via dynamic links (opened in browser), not pre-rendered
+export function generateStaticParams() {
+  return [];
+}
+
 export default function InvitePage() {
   const router = useRouter();
   const params = useParams();

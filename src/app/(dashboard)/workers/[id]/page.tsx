@@ -8,6 +8,11 @@ import { format } from 'date-fns';
 import { Id } from '../../../../../convex/_generated/dataModel';
 import Link from 'next/link';
 
+// Required for static export - dynamic routes loaded at runtime
+export function generateStaticParams() {
+  return [];
+}
+
 const statusColors: Record<string, string> = {
   active: 'bg-green-500/20 text-green-400',
   inactive: 'bg-gray-500/20 text-gray-400',
