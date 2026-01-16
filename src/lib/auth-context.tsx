@@ -18,6 +18,7 @@ interface User {
   role: "owner" | "worker";
   organizationId: Id<"organizations">;
   workerId?: Id<"workers">;
+  onboardingCompletedAt?: number;
 }
 
 interface Organization {
@@ -66,6 +67,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     api.auth.getUserWithOrganization,
     userId ? { userId } : "skip"
   );
+
+  // Clear invalid session if user no longer exists
+  useEffect(() => {
+    if (userId && userData === null) {
+      // User ID in localStorage but user not found in database
+      localStorage.removeItem(USER_ID_KEY);
+      setUserId(null);
+    }
+  }, [userId, userData]);
 
   const signIn = async (email: string, password: string) => {
     const result = await signInMutation({ email, password });

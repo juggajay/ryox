@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { MobileNav } from "@/components/mobile-nav";
 import { MobileHeader } from "@/components/mobile-header";
+import { IOSInstallPrompt } from "@/components/ios-install-prompt";
+import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 import { useAuth } from "@/lib/auth-context";
 
 export default function DashboardLayout({
@@ -56,6 +58,10 @@ export default function DashboardLayout({
 
       {/* Mobile Bottom Navigation - visible on mobile only */}
       <MobileNav />
+
+      {/* PWA Install Prompts - only shown in dashboard, after login */}
+      <IOSInstallPrompt />
+      <PWAInstallPrompt />
     </div>
   );
 }
