@@ -10,6 +10,7 @@ import {
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
+import { Storage } from "./storage";
 
 interface User {
   _id: Id<"users">;
@@ -53,14 +54,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInMutation = useMutation(api.auth.signIn);
   const signUpMutation = useMutation(api.auth.signUp);
 
-  // Load user ID from localStorage on mount
+  // Load user ID from storage on mount (supports native + web)
   useEffect(() => {
-    const storedUserId = localStorage.getItem(USER_ID_KEY);
-    console.log("[AUTH] Loading from localStorage:", storedUserId);
-    if (storedUserId) {
-      setUserId(storedUserId as Id<"users">);
-    }
-    setIsLoading(false);
+    const loadStoredUser = async () => {
+      try {
+        const storedUserId = await Storage.get(USER_ID_KEY);
+        console.log("[AUTH] Loading from storage:", storedUserId);
+        if (storedUserId) {
+          setUserId(storedUserId as Id<"users">);
+        }
+      } catch (error) {
+        console.error("[AUTH] Error loading from storage:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadStoredUser();
   }, []);
 
   // Fetch user data when userId changes
@@ -73,9 +82,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     console.log("[AUTH] Session check - userId:", userId, "userData:", userData);
     if (userId && userData === null) {
-      // User ID in localStorage but user not found in database
+      // User ID in storage but user not found in database
       console.log("[AUTH] CLEARING SESSION - user not found in database");
-      localStorage.removeItem(USER_ID_KEY);
+      Storage.remove(USER_ID_KEY);
       setUserId(null);
     }
   }, [userId, userData]);
@@ -83,7 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (email: string, password: string) => {
     const result = await signInMutation({ email, password });
     console.log("[AUTH] Sign in success, storing userId:", result.userId);
-    localStorage.setItem(USER_ID_KEY, result.userId);
+    await Storage.set(USER_ID_KEY, result.userId);
     setUserId(result.userId);
   };
 
@@ -95,12 +104,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     abn: string;
   }) => {
     const result = await signUpMutation(data);
-    localStorage.setItem(USER_ID_KEY, result.userId);
+    await Storage.set(USER_ID_KEY, result.userId);
     setUserId(result.userId);
   };
 
-  const signOut = () => {
-    localStorage.removeItem(USER_ID_KEY);
+  const signOut = async () => {
+    await Storage.remove(USER_ID_KEY);
     setUserId(null);
   };
 
