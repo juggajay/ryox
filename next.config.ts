@@ -4,6 +4,11 @@ const nextConfig: NextConfig = {
   // Enable static export for Capacitor builds
   output: process.env.BUILD_TARGET === 'capacitor' ? 'export' : undefined,
 
+  // Fix Turbopack workspace root detection
+  turbopack: {
+    root: __dirname,
+  },
+
   // Required for static export with images
   images: {
     unoptimized: process.env.BUILD_TARGET === 'capacitor',
