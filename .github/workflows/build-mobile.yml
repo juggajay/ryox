@@ -38,7 +38,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '17'
+          java-version: '21'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
@@ -87,8 +87,10 @@ jobs:
         run: npx cap sync ios
 
       - name: Install CocoaPods
-        working-directory: ios/App
-        run: pod install
+        run: |
+          cd ios/App
+          ls -la
+          pod install
 
       - name: Build iOS (Unsigned)
         working-directory: ios/App
@@ -143,8 +145,10 @@ jobs:
         run: npx cap sync ios
 
       - name: Install CocoaPods
-        working-directory: ios/App
-        run: pod install
+        run: |
+          cd ios/App
+          ls -la
+          pod install
 
       - name: Install Apple Certificate
         if: env.BUILD_CERTIFICATE_BASE64 != ''
