@@ -8,6 +8,8 @@ on:
       - 'public/**'
       - 'capacitor.config.ts'
       - 'package.json'
+      - 'next.config.ts'
+      - '.github/workflows/build-mobile.yml'
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
@@ -30,6 +32,7 @@ jobs:
         run: npm run build:capacitor
         env:
           BUILD_TARGET: capacitor
+          NEXT_PUBLIC_CONVEX_URL: ${{ secrets.NEXT_PUBLIC_CONVEX_URL }}
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -75,6 +78,7 @@ jobs:
         run: npm run build:capacitor
         env:
           BUILD_TARGET: capacitor
+          NEXT_PUBLIC_CONVEX_URL: ${{ secrets.NEXT_PUBLIC_CONVEX_URL }}
 
       - name: Add iOS platform
         run: npx cap add ios
@@ -130,6 +134,7 @@ jobs:
         run: npm run build:capacitor
         env:
           BUILD_TARGET: capacitor
+          NEXT_PUBLIC_CONVEX_URL: ${{ secrets.NEXT_PUBLIC_CONVEX_URL }}
 
       - name: Add iOS platform
         run: npx cap add ios
