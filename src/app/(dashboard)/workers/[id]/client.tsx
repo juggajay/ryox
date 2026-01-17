@@ -1,6 +1,7 @@
 'use client';
 
-import { useQuery } from 'convex/react';
+import { useState } from 'react';
+import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../../../../convex/_generated/api';
 import { useAuth } from '@/lib/auth-context';
 import { useParams } from 'next/navigation';
@@ -20,10 +21,292 @@ const tradeLabels: Record<string, string> = {
   foreman: 'Foreman',
 };
 
+type Worker = {
+  _id: Id<"workers">;
+  name: string;
+  phone: string;
+  email: string;
+  employmentType: "employee" | "subcontractor";
+  tradeClassification: "apprentice" | "qualified" | "leadingHand" | "foreman";
+  payRate: number;
+  chargeOutRate: number;
+  status: "active" | "inactive";
+  emergencyContact?: {
+    name: string;
+    phone: string;
+    relationship: string;
+  };
+};
+
+function EditWorkerModal({
+  isOpen,
+  onClose,
+  worker,
+  userId,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  worker: Worker;
+  userId: Id<"users">;
+}) {
+  const updateWorker = useMutation(api.workers.update);
+
+  const [formData, setFormData] = useState({
+    name: worker.name,
+    phone: worker.phone,
+    email: worker.email,
+    employmentType: worker.employmentType,
+    tradeClassification: worker.tradeClassification,
+    payRate: worker.payRate.toString(),
+    chargeOutRate: worker.chargeOutRate.toString(),
+    status: worker.status,
+    emergencyContactName: worker.emergencyContact?.name || '',
+    emergencyContactPhone: worker.emergencyContact?.phone || '',
+    emergencyContactRelationship: worker.emergencyContact?.relationship || '',
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setIsLoading(true);
+
+    try {
+      await updateWorker({
+        userId,
+        workerId: worker._id,
+        name: formData.name,
+        phone: formData.phone,
+        email: formData.email,
+        employmentType: formData.employmentType,
+        tradeClassification: formData.tradeClassification,
+        payRate: parseFloat(formData.payRate),
+        chargeOutRate: parseFloat(formData.chargeOutRate),
+        status: formData.status,
+        emergencyContact: formData.emergencyContactName
+          ? {
+              name: formData.emergencyContactName,
+              phone: formData.emergencyContactPhone,
+              relationship: formData.emergencyContactRelationship,
+            }
+          : undefined,
+      });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update worker');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <div className="relative bg-[var(--card)] border border-[var(--border)] rounded-xl w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-[var(--foreground-muted)] hover:text-[var(--foreground)]"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+
+        <h2 className="text-xl font-semibold mb-6" style={{ fontFamily: 'var(--font-display)' }}>
+          Edit Worker
+        </h2>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
+              Name
+            </label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
+                Phone
+              </label>
+              <input
+                type="tel"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
+                Email
+              </label>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
+                Employment Type
+              </label>
+              <select
+                value={formData.employmentType}
+                onChange={(e) => setFormData({ ...formData, employmentType: e.target.value as "employee" | "subcontractor" })}
+                className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
+              >
+                <option value="employee">Employee</option>
+                <option value="subcontractor">Subcontractor</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
+                Trade Classification
+              </label>
+              <select
+                value={formData.tradeClassification}
+                onChange={(e) => setFormData({ ...formData, tradeClassification: e.target.value as "apprentice" | "qualified" | "leadingHand" | "foreman" })}
+                className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
+              >
+                <option value="apprentice">Apprentice</option>
+                <option value="qualified">Qualified Carpenter</option>
+                <option value="leadingHand">Leading Hand</option>
+                <option value="foreman">Foreman</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
+                Pay Rate ($/hr)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={formData.payRate}
+                onChange={(e) => setFormData({ ...formData, payRate: e.target.value })}
+                className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
+                Charge-out Rate ($/hr)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={formData.chargeOutRate}
+                onChange={(e) => setFormData({ ...formData, chargeOutRate: e.target.value })}
+                className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
+                required
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
+              Status
+            </label>
+            <select
+              value={formData.status}
+              onChange={(e) => setFormData({ ...formData, status: e.target.value as "active" | "inactive" })}
+              className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
+            >
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+
+          <div className="pt-2">
+            <div className="text-xs uppercase tracking-wider text-[var(--foreground-muted)] mb-3 flex items-center gap-2">
+              <div className="h-px flex-1 bg-[var(--border)]" />
+              <span>Emergency Contact</span>
+              <div className="h-px flex-1 bg-[var(--border)]" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
+                Contact Name
+              </label>
+              <input
+                type="text"
+                value={formData.emergencyContactName}
+                onChange={(e) => setFormData({ ...formData, emergencyContactName: e.target.value })}
+                className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
+                Relationship
+              </label>
+              <input
+                type="text"
+                value={formData.emergencyContactRelationship}
+                onChange={(e) => setFormData({ ...formData, emergencyContactRelationship: e.target.value })}
+                className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
+                placeholder="e.g. Spouse, Parent"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
+              Contact Phone
+            </label>
+            <input
+              type="tel"
+              value={formData.emergencyContactPhone}
+              onChange={(e) => setFormData({ ...formData, emergencyContactPhone: e.target.value })}
+              className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
+            />
+          </div>
+
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-lg text-sm">
+              {error}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="btn-primary w-full disabled:opacity-50"
+          >
+            {isLoading ? 'Saving...' : 'Save Changes'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function WorkerDetailPageClient() {
   const { user } = useAuth();
   const params = useParams();
   const workerId = params.id as string;
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const worker = useQuery(api.workers.get,
     user && workerId ? { userId: user._id, workerId: workerId as Id<"workers"> } : 'skip'
@@ -70,9 +353,17 @@ export default function WorkerDetailPageClient() {
           <h1 className="text-3xl font-bold mt-2">{worker.name}</h1>
           <p className="text-[var(--foreground-muted)]">{tradeLabels[worker.tradeClassification]}</p>
         </div>
-        <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusColors[worker.status]}`}>
-          {worker.status.charAt(0).toUpperCase() + worker.status.slice(1)}
-        </span>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowEditModal(true)}
+            className="px-4 py-2 bg-[var(--accent)] text-[var(--background)] rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+          >
+            Edit
+          </button>
+          <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusColors[worker.status]}`}>
+            {worker.status.charAt(0).toUpperCase() + worker.status.slice(1)}
+          </span>
+        </div>
       </div>
 
       {/* Key Info Cards */}
@@ -206,6 +497,15 @@ export default function WorkerDetailPageClient() {
           <p className="text-[var(--foreground-muted)]">No timesheets submitted</p>
         )}
       </div>
+
+      {user && worker && (
+        <EditWorkerModal
+          isOpen={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          worker={worker as Worker}
+          userId={user._id}
+        />
+      )}
     </div>
   );
 }

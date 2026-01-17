@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "../../../../convex/_generated/api";
+import Link from "next/link";
 
 function InviteModal({
   isOpen,
@@ -280,9 +281,10 @@ export default function WorkersPage() {
       ) : (
         <div className="grid gap-4">
           {workers.map((worker) => (
-            <div
+            <Link
+              href={`/workers/${worker._id}`}
               key={worker._id}
-              className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-6 flex items-center justify-between"
+              className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-6 flex items-center justify-between hover:border-[var(--accent)] transition-colors"
             >
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-full bg-[var(--accent)]/20 flex items-center justify-center">
@@ -309,7 +311,7 @@ export default function WorkersPage() {
                   {worker.status === "active" ? "Active" : "Inactive"}
                 </span>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       )}

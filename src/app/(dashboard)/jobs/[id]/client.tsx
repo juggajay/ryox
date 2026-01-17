@@ -17,6 +17,219 @@ const statusColors: Record<string, string> = {
   invoiced: 'bg-purple-500/20 text-purple-400',
 };
 
+type Job = {
+  _id: Id<"jobs">;
+  name: string;
+  siteAddress: string;
+  jobType: "contract" | "labourHire";
+  quotedPrice?: number;
+  estimatedHours?: number;
+  materialsBudget?: number;
+  startDate: number;
+  expectedEndDate?: number;
+  notes?: string;
+  status: "pending" | "active" | "onHold" | "completed" | "invoiced";
+};
+
+function EditJobModal({
+  isOpen,
+  onClose,
+  job,
+  userId,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  job: Job;
+  userId: Id<"users">;
+}) {
+  const updateJob = useMutation(api.jobs.update);
+
+  const [formData, setFormData] = useState({
+    name: job.name,
+    siteAddress: job.siteAddress,
+    quotedPrice: job.quotedPrice?.toString() || '',
+    estimatedHours: job.estimatedHours?.toString() || '',
+    materialsBudget: job.materialsBudget?.toString() || '',
+    startDate: new Date(job.startDate).toISOString().split('T')[0],
+    expectedEndDate: job.expectedEndDate ? new Date(job.expectedEndDate).toISOString().split('T')[0] : '',
+    notes: job.notes || '',
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setIsLoading(true);
+
+    try {
+      await updateJob({
+        userId,
+        jobId: job._id,
+        name: formData.name,
+        siteAddress: formData.siteAddress,
+        quotedPrice: formData.quotedPrice ? parseFloat(formData.quotedPrice) : undefined,
+        estimatedHours: formData.estimatedHours ? parseFloat(formData.estimatedHours) : undefined,
+        materialsBudget: formData.materialsBudget ? parseFloat(formData.materialsBudget) : undefined,
+        startDate: new Date(formData.startDate).getTime(),
+        expectedEndDate: formData.expectedEndDate ? new Date(formData.expectedEndDate).getTime() : undefined,
+        notes: formData.notes || undefined,
+      });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update job');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <div className="relative bg-[var(--card)] border border-[var(--border)] rounded-xl w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-[var(--foreground-muted)] hover:text-[var(--foreground)]"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+
+        <h2 className="text-xl font-semibold mb-6" style={{ fontFamily: 'var(--font-display)' }}>
+          Edit Job
+        </h2>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
+              Job Name
+            </label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
+              Site Address
+            </label>
+            <input
+              type="text"
+              value={formData.siteAddress}
+              onChange={(e) => setFormData({ ...formData, siteAddress: e.target.value })}
+              className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
+              required
+            />
+          </div>
+
+          {job.jobType === 'contract' && (
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
+                  Quoted Price ($)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.quotedPrice}
+                  onChange={(e) => setFormData({ ...formData, quotedPrice: e.target.value })}
+                  className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
+                  Est. Hours
+                </label>
+                <input
+                  type="number"
+                  value={formData.estimatedHours}
+                  onChange={(e) => setFormData({ ...formData, estimatedHours: e.target.value })}
+                  className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
+                  Materials ($)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.materialsBudget}
+                  onChange={(e) => setFormData({ ...formData, materialsBudget: e.target.value })}
+                  className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
+                Start Date
+              </label>
+              <input
+                type="date"
+                value={formData.startDate}
+                onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
+                Expected End Date
+              </label>
+              <input
+                type="date"
+                value={formData.expectedEndDate}
+                onChange={(e) => setFormData({ ...formData, expectedEndDate: e.target.value })}
+                className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)]"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2 text-[var(--foreground-muted)]">
+              Notes
+            </label>
+            <textarea
+              value={formData.notes}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] text-[var(--foreground)] resize-none"
+              rows={2}
+              placeholder="Any special requirements or notes..."
+            />
+          </div>
+
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-lg text-sm">
+              {error}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="btn-primary w-full disabled:opacity-50"
+          >
+            {isLoading ? 'Saving...' : 'Save Changes'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function JobDetailPageClient() {
   const { user } = useAuth();
   const params = useParams();
@@ -31,6 +244,9 @@ export default function JobDetailPageClient() {
   const removeAllocation = useMutation(api.jobs.removeAllocation);
   const createQuickWorker = useMutation(api.workers.createQuick);
   const updateJob = useMutation(api.jobs.update);
+
+  // Edit modal state
+  const [showEditModal, setShowEditModal] = useState(false);
 
   // Worker allocation state
   const [showAddWorker, setShowAddWorker] = useState(false);
@@ -166,18 +382,26 @@ export default function JobDetailPageClient() {
           <h1 className="text-3xl font-bold mt-2">{job.name}</h1>
           <p className="text-[var(--foreground-muted)]">{job.siteAddress}</p>
         </div>
-        <select
-          value={job.status}
-          onChange={(e) => handleStatusChange(e.target.value)}
-          disabled={isUpdatingStatus}
-          className={`px-3 py-2 rounded-lg text-sm font-medium border-0 cursor-pointer ${statusColors[job.status]} ${isUpdatingStatus ? 'opacity-50' : ''}`}
-        >
-          <option value="pending">Pending</option>
-          <option value="active">Active</option>
-          <option value="onHold">On Hold</option>
-          <option value="completed">Completed</option>
-          <option value="invoiced">Invoiced</option>
-        </select>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowEditModal(true)}
+            className="px-4 py-2 bg-[var(--accent)] text-[var(--background)] rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+          >
+            Edit
+          </button>
+          <select
+            value={job.status}
+            onChange={(e) => handleStatusChange(e.target.value)}
+            disabled={isUpdatingStatus}
+            className={`px-3 py-2 rounded-lg text-sm font-medium border-0 cursor-pointer ${statusColors[job.status]} ${isUpdatingStatus ? 'opacity-50' : ''}`}
+          >
+            <option value="pending">Pending</option>
+            <option value="active">Active</option>
+            <option value="onHold">On Hold</option>
+            <option value="completed">Completed</option>
+            <option value="invoiced">Invoiced</option>
+          </select>
+        </div>
       </div>
 
       {/* Key Info Cards */}
@@ -469,6 +693,15 @@ export default function JobDetailPageClient() {
           <p className="text-[var(--foreground-muted)]">No expenses recorded</p>
         )}
       </div>
+
+      {user && job && (
+        <EditJobModal
+          isOpen={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          job={job as Job}
+          userId={user._id}
+        />
+      )}
     </div>
   );
 }

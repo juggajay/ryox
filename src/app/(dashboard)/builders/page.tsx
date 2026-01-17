@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "../../../../convex/_generated/api";
+import Link from "next/link";
 
 function AddBuilderModal({
   isOpen,
@@ -283,9 +284,10 @@ export default function BuildersPage() {
       ) : (
         <div className="grid gap-4">
           {builders.map((builder) => (
-            <div
+            <Link
+              href={`/builders/${builder._id}`}
               key={builder._id}
-              className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-6"
+              className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-6 block hover:border-[var(--accent)] transition-colors"
             >
               <div className="flex items-start justify-between mb-4">
                 <div>
@@ -335,7 +337,7 @@ export default function BuildersPage() {
                   </div>
                 </div>
               )}
-            </div>
+            </Link>
           ))}
         </div>
       )}
