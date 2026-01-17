@@ -146,8 +146,9 @@ export const searchKnowledge = internalAction({
   args: {
     query: v.string(),
     limit: v.optional(v.number()),
+    minScore: v.optional(v.number()),
   },
-  handler: async (ctx, { query, limit = 5 }): Promise<Array<{
+  handler: async (ctx, { query, limit = 3, minScore = 0.6 }): Promise<Array<{
     content: string;
     score: number;
     docTitle: string;
@@ -163,15 +164,22 @@ export const searchKnowledge = internalAction({
       return [];
     }
 
-    // Vector search
+    // Vector search - fetch extra to allow filtering
     const results = await ctx.vectorSearch("knowledgeChunks", "by_embedding", {
       vector: embeddingResult.embedding,
-      limit,
+      limit: limit + 2, // Fetch extra in case some are below threshold
     });
+
+    // Filter by minimum score and limit
+    const filtered = results
+      .filter((r) => r._score >= minScore)
+      .slice(0, limit);
+
+    console.log(`Knowledge search: ${results.length} results, ${filtered.length} above ${minScore} threshold`);
 
     // Enrich with document info
     const enriched = await Promise.all(
-      results.map(async (result) => {
+      filtered.map(async (result) => {
         const chunk = await ctx.runQuery(internal.knowledge.getChunk, { chunkId: result._id });
         const doc = chunk ? await ctx.runQuery(internal.knowledge.getDoc, { docId: chunk.docId }) : null;
 
@@ -241,21 +249,22 @@ export const askQuestion = action({
             {
               parts: [
                 {
-                  text: `You are a knowledgeable assistant for Australian carpenters. Answer questions based ONLY on the provided context from official building standards and guides.
+                  text: `You are a concise assistant for Australian carpenters on job sites. They need quick, accurate answers - not essays.
 
-IMPORTANT RULES:
-1. Only use information from the CONTEXT below
-2. If the context doesn't contain the answer, say "I don't have specific information on that in my knowledge base"
-3. Always cite which source your information comes from using [Source: title]
-4. Be practical and specific - carpenters need actionable information
-5. If referencing Australian Standards (AS 1684, NCC, etc.), mention the specific standard
+RESPONSE RULES:
+1. Maximum 2 sentences for your direct answer
+2. Sources inline and compact: "...value *(Source)*" - never citation blocks
+3. State assumptions: "Assuming standard setup (450 centres)..."
+4. Safety/compliance notes use "Heads up:" prefix and are ALWAYS included - never hide these
+5. End with ONE short follow-up offer if relevant: "Want the span table?" or "Need fixing specs?"
+6. If question is vague, ask ONE clarifying question: "What matters most - strength, cost, or looks?"
 
 CONTEXT:
 ${context}
 
 QUESTION: ${args.question}
 
-Provide a clear, practical answer with source citations.`,
+Remember: 1-2 sentences max, inline sources, safety notes prominent.`,
                 },
               ],
             },

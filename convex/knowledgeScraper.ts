@@ -8,13 +8,32 @@ const JINA_API_KEY = "jina_8f23cf2ccf4842fe908240f6a2405aadca_vX0BwKYJf_pZhXTQ1T
 
 // All target URLs to scrape
 const TARGET_URLS = [
+  // WoodSolutions - Timber Framing
   { url: "https://www.woodsolutions.com.au/timber-framing", title: "WoodSolutions: Timber Framing" },
   { url: "https://www.woodsolutions.com.au/wood-species", title: "WoodSolutions: Wood Species" },
   { url: "https://www.woodsolutions.com.au/resources/specifications/span-tables-and-software", title: "WoodSolutions: Span Tables" },
   { url: "https://www.woodsolutions.com.au/design-guides", title: "WoodSolutions: Design Guides" },
+  { url: "https://www.woodsolutions.com.au/resources/standards-codes/as1684-user-guides", title: "WoodSolutions: AS 1684 User Guides" },
+
+  // HIA - Australian Standards
   { url: "https://hia.com.au/resources-and-advice/building-it-right/australian-standards/articles/using-as-1684-for-timber-framing", title: "HIA: Using AS 1684" },
   { url: "https://hia.com.au/resources-and-advice/building-it-right/australian-standards/articles/residential-timber-framed-construction-part-2-non-cyclonic-areas", title: "HIA: Non-Cyclonic Construction" },
+
+  // ABCB / NCC - Legislation
   { url: "https://www.abcb.gov.au/resources", title: "ABCB: Resources" },
+  { url: "https://ncc.abcb.gov.au/editions/ncc-2022/adopted/housing-provisions/front-matter/how-use-housing-provisions", title: "NCC: How to Use Housing Provisions" },
+
+  // NSW Standards & Tolerances - Quality/Finish
+  { url: "https://www.fairtrading.nsw.gov.au/housing-and-property/building-and-renovating/after-you-build-or-renovate/guide-to-standards-and-tolerances", title: "NSW: Guide to Standards and Tolerances" },
+
+  // James Hardie - Fibre Cement Products
+  { url: "https://www.jameshardie.com.au/technicalLibrary", title: "James Hardie: Technical Library" },
+
+  // CSR Gyprock - Plasterboard Products
+  { url: "https://www.gyprock.com.au/resources", title: "CSR Gyprock: Resources" },
+
+  // Hume Doors - Door Installation
+  { url: "https://www.humedoors.com.au/support/installation-instructions", title: "Hume Doors: Installation Instructions" },
 ];
 
 // Scrape a single URL via Jina Reader API (public for testing)
