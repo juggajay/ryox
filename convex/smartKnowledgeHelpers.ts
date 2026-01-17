@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery, query } from "./_generated/server";
 
 // Query span table with filters
+// OPTIMIZED: Use Convex query filters instead of collect + in-memory filtering
 export const querySpanTable = internalQuery({
   args: {
     memberType: v.optional(v.string()),
@@ -13,49 +14,64 @@ export const querySpanTable = internalQuery({
     loadType: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    let results = await ctx.db.query("spanTables").collect();
+    // OPTIMIZATION: Use index-based query for the most selective filter
+    // then apply server-side .filter() for remaining conditions
+    // This avoids loading entire collection into memory
 
-    // Filter by member type
+    // Start with the most common filter (memberType is usually specified)
+    let query = ctx.db.query("spanTables");
+
+    // Use index if memberType is specified (most common query pattern)
     if (args.memberType) {
-      const memberType = args.memberType;
-      results = results.filter(r => r.memberType === memberType);
+      query = query.withIndex("by_member_type", (q) =>
+        q.eq("memberType", args.memberType as any)
+      );
+    } else if (args.timberType) {
+      // Fallback to timber type index
+      query = query.withIndex("by_timber_type", (q) =>
+        q.eq("timberType", args.timberType as any)
+      );
+    } else if (args.loadType) {
+      // Fallback to load type index
+      query = query.withIndex("by_load_type", (q) =>
+        q.eq("loadType", args.loadType as any)
+      );
     }
 
-    // Filter by timber type
-    if (args.timberType) {
-      const timberType = args.timberType;
-      results = results.filter(r => r.timberType === timberType);
-    }
+    // Apply remaining filters server-side (not in-memory)
+    const results = await query
+      .filter((q) => {
+        const conditions = [];
 
-    // Filter by species (for hardwood)
-    if (args.species) {
-      const species = args.species;
-      results = results.filter(r => r.species === species);
-    }
+        // Only add filters for args that weren't used in withIndex
+        if (args.memberType && !query.toString().includes("by_member_type")) {
+          conditions.push(q.eq(q.field("memberType"), args.memberType));
+        }
+        if (args.timberType) {
+          conditions.push(q.eq(q.field("timberType"), args.timberType));
+        }
+        if (args.species) {
+          conditions.push(q.eq(q.field("species"), args.species));
+        }
+        if (args.size) {
+          conditions.push(q.eq(q.field("size"), args.size));
+        }
+        if (args.minSpan !== undefined) {
+          conditions.push(q.gte(q.field("maxSpan"), args.minSpan));
+        }
+        if (args.spacing !== undefined) {
+          conditions.push(q.eq(q.field("spacing"), args.spacing));
+        }
+        if (args.loadType) {
+          conditions.push(q.eq(q.field("loadType"), args.loadType));
+        }
 
-    // Filter by size
-    if (args.size) {
-      const size = args.size;
-      results = results.filter(r => r.size === size);
-    }
-
-    // Filter by minimum span (find sizes that CAN span this distance)
-    if (args.minSpan) {
-      const minSpan = args.minSpan;
-      results = results.filter(r => r.maxSpan >= minSpan);
-    }
-
-    // Filter by spacing (with some tolerance)
-    if (args.spacing) {
-      const spacing = args.spacing;
-      results = results.filter(r => r.spacing === spacing);
-    }
-
-    // Filter by load type
-    if (args.loadType) {
-      const loadType = args.loadType;
-      results = results.filter(r => r.loadType === loadType);
-    }
+        // Combine all conditions with AND
+        if (conditions.length === 0) return true;
+        if (conditions.length === 1) return conditions[0];
+        return conditions.reduce((acc, cond) => q.and(acc, cond));
+      })
+      .collect();
 
     // Sort by maxSpan ascending (smallest suitable size first)
     results.sort((a, b) => a.maxSpan - b.maxSpan);
@@ -140,25 +156,30 @@ export const insertTimberGrade = internalMutation({
 });
 
 // Get timber grade info
+// OPTIMIZED: Use indexes instead of collect + filter
 export const getTimberGrade = internalQuery({
   args: {
     grade: v.optional(v.string()),
     species: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    let results = await ctx.db.query("timberGrades").collect();
+    // Use index-based lookup for better performance
+    let query = ctx.db.query("timberGrades");
 
     if (args.grade) {
-      const grade = args.grade;
-      results = results.filter(r => r.grade === grade);
+      query = query.withIndex("by_grade", (q) => q.eq("grade", args.grade!));
+    } else if (args.species) {
+      query = query.withIndex("by_species", (q) => q.eq("species", args.species!));
     }
 
-    if (args.species) {
-      const species = args.species;
-      results = results.filter(r => r.species === species);
+    // Apply remaining filter if both grade and species specified
+    if (args.grade && args.species) {
+      return await query
+        .filter((q) => q.eq(q.field("species"), args.species!))
+        .collect();
     }
 
-    return results;
+    return await query.collect();
   },
 });
 

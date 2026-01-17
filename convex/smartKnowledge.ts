@@ -304,6 +304,12 @@ export const smartQuery = action({
     parsed?: any;
     sources: Array<{ title: string; url?: string }>;
   }> => {
+    // MEMORY: Fetch conversation history for context
+    const conversationHistory = await ctx.runQuery(
+      internal.knowledge.formatHistoryForPrompt,
+      { userId: args.userId }
+    );
+
     // Parse the query
     let parsed = parseQuery(args.question);
 
@@ -380,6 +386,25 @@ export const smartQuery = action({
       });
 
       const answer = formatSpanResult(results, parsed);
+
+      // MEMORY: Save span lookup to conversation history
+      if (answer && results.length > 0) {
+        ctx.runMutation(internal.knowledge.saveConversation, {
+          userId: args.userId,
+          question: args.question,
+          answer,
+          parsedContext: {
+            memberType: parsed.memberType,
+            timberType: parsed.timberType,
+            species: parsed.species,
+            size: parsed.size,
+            span: parsed.span,
+            spacing: parsed.spacing,
+            loadType: parsed.loadType,
+          },
+        });
+      }
+
       return {
         answer,
         needsFollowUp: false,
@@ -388,11 +413,30 @@ export const smartQuery = action({
       };
     }
 
-    // Fall back to RAG for general queries
+    // Fall back to RAG for general queries (with conversation history)
     const ragResult = await ctx.runAction(api.knowledge.askQuestion, {
       userId: args.userId,
       question: args.question,
+      conversationHistory: conversationHistory ?? undefined,
     });
+
+    // MEMORY: Save RAG response to conversation history
+    if (ragResult.answer && !ragResult.answer.startsWith("API Error")) {
+      ctx.runMutation(internal.knowledge.saveConversation, {
+        userId: args.userId,
+        question: args.question,
+        answer: ragResult.answer,
+        parsedContext: parsed.memberType ? {
+          memberType: parsed.memberType,
+          timberType: parsed.timberType,
+          species: parsed.species,
+          size: parsed.size,
+          span: parsed.span,
+          spacing: parsed.spacing,
+          loadType: parsed.loadType,
+        } : undefined,
+      });
+    }
 
     return {
       answer: ragResult.answer,

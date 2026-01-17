@@ -46,6 +46,7 @@ export default defineSchema({
     workerId: v.optional(v.id("workers")),
     createdAt: v.number(),
     lastLoginAt: v.optional(v.number()),
+    onboardingCompletedAt: v.optional(v.number()), // When worker completed onboarding
   })
     .index("by_email", ["email"])
     .index("by_organization", ["organizationId"])
@@ -163,6 +164,9 @@ export default defineSchema({
     quotedPrice: v.optional(v.number()),
     estimatedHours: v.optional(v.number()),
     materialsBudget: v.optional(v.number()),
+    // Track cumulative invoiced amount for contract jobs (progress claims)
+    totalInvoicedAmount: v.optional(v.number()),
+    totalInvoicedPercentage: v.optional(v.number()),
     startDate: v.number(),
     expectedEndDate: v.optional(v.number()),
     actualEndDate: v.optional(v.number()),
@@ -319,6 +323,18 @@ export default defineSchema({
     dueDate: v.number(),
     sentAt: v.optional(v.number()),
     paidAt: v.optional(v.number()),
+    // Contract job progress claim fields
+    completionPercentage: v.optional(v.number()), // e.g., 60 for 60% complete
+    // Labour hire weekly invoice fields
+    weekStart: v.optional(v.number()), // Monday timestamp
+    weekEnd: v.optional(v.number()), // Friday timestamp
+    lineItems: v.optional(v.array(v.object({
+      workerId: v.id("workers"),
+      workerName: v.string(),
+      hours: v.number(),
+      rate: v.number(),
+      total: v.number(),
+    }))),
     // Xero invoice tracking
     xeroInvoiceId: v.optional(v.string()),
     xeroInvoiceNumber: v.optional(v.string()),
@@ -389,6 +405,121 @@ export default defineSchema({
       vectorField: "embedding",
       dimensions: 1536,
     }),
+
+  // Knowledge Query Cache - speeds up repeated questions
+  knowledgeCache: defineTable({
+    queryHash: v.string(), // MD5/simple hash of normalized query
+    normalizedQuery: v.string(), // Lowercased, trimmed query
+    answer: v.string(),
+    sources: v.array(v.object({
+      title: v.string(),
+      url: v.optional(v.string()),
+    })),
+    createdAt: v.number(),
+    hitCount: v.number(), // Track popularity
+    lastHitAt: v.number(),
+  })
+    .index("by_query_hash", ["queryHash"])
+    .index("by_created_at", ["createdAt"]),
+
+  // Knowledge Conversation Memory - stores recent exchanges for context
+  knowledgeConversations: defineTable({
+    userId: v.id("users"),
+    question: v.string(),
+    answerSummary: v.string(), // Compressed version of answer for token efficiency
+    parsedContext: v.optional(v.object({
+      memberType: v.optional(v.string()),
+      timberType: v.optional(v.string()),
+      species: v.optional(v.string()),
+      size: v.optional(v.string()),
+      span: v.optional(v.number()),
+      spacing: v.optional(v.number()),
+      loadType: v.optional(v.string()),
+    })),
+    createdAt: v.number(),
+    expiresAt: v.number(), // createdAt + 24hrs
+  })
+    .index("by_user", ["userId"])
+    .index("by_expires", ["expiresAt"]),
+
+  // ============================================
+  // STRUCTURED KNOWLEDGE BASE (Span Tables etc)
+  // ============================================
+
+  // Span table entries - precise lookup data
+  spanTables: defineTable({
+    memberType: v.union(
+      v.literal("bearer"),
+      v.literal("joist"),
+      v.literal("rafter"),
+      v.literal("lintel"),
+      v.literal("stud"),
+      v.literal("decking_joist"),
+      v.literal("ceiling_joist"),
+      v.literal("roof_beam")
+    ),
+    timberType: v.union(
+      v.literal("LVL"),
+      v.literal("MGP10"),
+      v.literal("MGP12"),
+      v.literal("MGP15"),
+      v.literal("hardwood"),
+      v.literal("glulam")
+    ),
+    species: v.optional(v.string()), // "spotted_gum", "blackbutt", etc.
+    stressGrade: v.optional(v.string()), // "F14", "F17", "F27", "E14"
+    size: v.string(), // "90x45", "140x45", "190x45"
+    width: v.number(), // mm
+    depth: v.number(), // mm
+    loadType: v.union(
+      v.literal("floor"),
+      v.literal("roof"),
+      v.literal("deck"),
+      v.literal("balcony"),
+      v.literal("ceiling")
+    ),
+    spacing: v.number(), // 450, 600, 900 mm
+    maxSpan: v.number(), // mm - THE ANSWER
+    continuous: v.boolean(), // single vs continuous span
+    loadWidth: v.optional(v.number()), // for bearers - floor load width in mm
+    roofLoad: v.optional(v.string()), // "sheet", "tile" for roof members
+    source: v.string(), // "Wesbeam E14 Guide", "Boral Hardwood Tables"
+    sourcePage: v.optional(v.string()),
+  })
+    .index("by_member_type", ["memberType"])
+    .index("by_timber_type", ["timberType"])
+    .index("by_species", ["species"])
+    .index("by_size", ["size"])
+    .index("by_load_type", ["loadType"]),
+
+  // Fastener/connection requirements
+  fasteners: defineTable({
+    connection: v.string(), // "joist_to_bearer", "bearer_to_post", "rafter_to_plate"
+    memberType: v.optional(v.string()), // what's being connected
+    method: v.string(), // "skew_nail", "joist_hanger", "bolted", "coach_screw"
+    fastenerSpec: v.string(), // "2x 75mm nails", "M12 bolt", "10g x 50mm screws"
+    quantity: v.optional(v.number()),
+    timberType: v.optional(v.string()), // specific requirements for hardwood
+    notes: v.optional(v.string()), // "Pre-drill for hardwood"
+    source: v.string(),
+  })
+    .index("by_connection", ["connection"]),
+
+  // Timber grades and species reference
+  timberGrades: defineTable({
+    grade: v.string(), // "MGP10", "F17", "LVL-E14"
+    species: v.optional(v.string()), // "spotted_gum", "blackbutt"
+    stressGrade: v.string(), // "F5", "F8", "F14", "F17", "F27"
+    bendingStrength: v.optional(v.number()), // MPa
+    durabilityClass: v.optional(v.number()), // 1-4
+    commonUses: v.array(v.string()), // ["decking", "bearers", "framing"]
+    treatmentRequired: v.string(), // "none", "H2", "H3", "H4"
+    inGroundOk: v.boolean(),
+    density: v.optional(v.number()), // kg/m3
+    source: v.string(),
+  })
+    .index("by_grade", ["grade"])
+    .index("by_species", ["species"]),
 
   // Xero OAuth Sessions (temporary, for PKCE flow)
   xeroOAuthSessions: defineTable({

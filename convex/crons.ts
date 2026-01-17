@@ -13,4 +13,12 @@ crons.interval(
   internal.xero.refreshAllXeroTokens
 );
 
+// Clean up expired conversation memory entries every hour
+// Conversations older than 24 hours are removed to keep storage lean
+crons.interval(
+  "cleanup expired conversations",
+  { hours: 1 },
+  internal.knowledge.cleanupExpiredConversations
+);
+
 export default crons;
