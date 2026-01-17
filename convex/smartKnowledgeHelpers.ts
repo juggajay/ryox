@@ -18,36 +18,38 @@ export const querySpanTable = internalQuery({
     // then apply server-side .filter() for remaining conditions
     // This avoids loading entire collection into memory
 
-    // Start with the most common filter (memberType is usually specified)
-    let query = ctx.db.query("spanTables");
+    // Build and execute query based on which index to use
+    const buildQuery = () => {
+      const baseQuery = ctx.db.query("spanTables");
 
-    // Use index if memberType is specified (most common query pattern)
-    if (args.memberType) {
-      query = query.withIndex("by_member_type", (q) =>
-        q.eq("memberType", args.memberType as any)
-      );
-    } else if (args.timberType) {
-      // Fallback to timber type index
-      query = query.withIndex("by_timber_type", (q) =>
-        q.eq("timberType", args.timberType as any)
-      );
-    } else if (args.loadType) {
-      // Fallback to load type index
-      query = query.withIndex("by_load_type", (q) =>
-        q.eq("loadType", args.loadType as any)
-      );
-    }
+      // Use index if memberType is specified (most common query pattern)
+      if (args.memberType) {
+        return baseQuery.withIndex("by_member_type", (q) =>
+          q.eq("memberType", args.memberType as any)
+        );
+      } else if (args.timberType) {
+        // Fallback to timber type index
+        return baseQuery.withIndex("by_timber_type", (q) =>
+          q.eq("timberType", args.timberType as any)
+        );
+      } else if (args.loadType) {
+        // Fallback to load type index
+        return baseQuery.withIndex("by_load_type", (q) =>
+          q.eq("loadType", args.loadType as any)
+        );
+      }
+      return baseQuery;
+    };
 
     // Apply remaining filters server-side (not in-memory)
-    const results = await query
+    const results = await buildQuery()
       .filter((q) => {
         const conditions = [];
 
-        // Only add filters for args that weren't used in withIndex
-        if (args.memberType && !query.toString().includes("by_member_type")) {
-          conditions.push(q.eq(q.field("memberType"), args.memberType));
-        }
-        if (args.timberType) {
+        // Add filters for args not used in withIndex
+        if (args.timberType && !args.memberType) {
+          // timberType was used in index, skip
+        } else if (args.timberType) {
           conditions.push(q.eq(q.field("timberType"), args.timberType));
         }
         if (args.species) {
@@ -164,22 +166,25 @@ export const getTimberGrade = internalQuery({
   },
   handler: async (ctx, args) => {
     // Use index-based lookup for better performance
-    let query = ctx.db.query("timberGrades");
-
-    if (args.grade) {
-      query = query.withIndex("by_grade", (q) => q.eq("grade", args.grade!));
-    } else if (args.species) {
-      query = query.withIndex("by_species", (q) => q.eq("species", args.species!));
-    }
+    const baseQuery = ctx.db.query("timberGrades");
 
     // Apply remaining filter if both grade and species specified
     if (args.grade && args.species) {
-      return await query
+      return await baseQuery
+        .withIndex("by_grade", (q) => q.eq("grade", args.grade!))
         .filter((q) => q.eq(q.field("species"), args.species!))
         .collect();
     }
 
-    return await query.collect();
+    if (args.grade) {
+      return await baseQuery.withIndex("by_grade", (q) => q.eq("grade", args.grade!)).collect();
+    }
+
+    if (args.species) {
+      return await baseQuery.withIndex("by_species", (q) => q.eq("species", args.species!)).collect();
+    }
+
+    return await baseQuery.collect();
   },
 });
 
