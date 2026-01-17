@@ -44,12 +44,21 @@ export const getConnectionStatus = query({
     }
 
     const xero = org.settings.xero;
+    const now = Date.now();
+
+    // tokenExpiresAt of 0 means refresh token failed - needs full reconnection
+    // tokenExpiresAt < now means access token expired but may auto-refresh
+    const needsReconnection = xero.tokenExpiresAt === 0;
+    const accessTokenExpired = !needsReconnection && xero.tokenExpiresAt < now;
+
     return {
       connected: true,
       tenantName: xero.tenantName,
       connectedAt: xero.connectedAt,
       lastSyncAt: xero.lastSyncAt,
-      tokenExpired: xero.tokenExpiresAt < Date.now(),
+      tokenExpired: needsReconnection || accessTokenExpired,
+      needsReconnection, // Refresh token expired - must re-authenticate
+      accessTokenExpired, // Access token expired - will auto-refresh on next API call
     };
   },
 });
@@ -762,5 +771,409 @@ export const exportInvoice = action({
       xeroInvoiceId: createdInvoice.InvoiceID,
       xeroInvoiceNumber: createdInvoice.InvoiceNumber,
     };
+  },
+});
+
+// ============================================
+// SYNC FROM XERO
+// ============================================
+
+// Internal mutation to update invoice status from Xero
+export const updateInvoiceFromXero = internalMutation({
+  args: {
+    invoiceId: v.id("invoices"),
+    xeroStatus: v.string(),
+    amountPaid: v.optional(v.number()),
+    amountDue: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    // Map Xero status to CarpTrack status
+    let status: "draft" | "sent" | "paid" | "overdue" = "draft";
+
+    switch (args.xeroStatus) {
+      case "DRAFT":
+        status = "draft";
+        break;
+      case "SUBMITTED":
+      case "AUTHORISED":
+        status = "sent";
+        break;
+      case "PAID":
+        status = "paid";
+        break;
+      case "VOIDED":
+      case "DELETED":
+        // Keep current status for voided/deleted
+        return { updated: false, reason: "Invoice voided or deleted in Xero" };
+      default:
+        status = "sent";
+    }
+
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice) return { updated: false, reason: "Invoice not found" };
+
+    // Update if status changed
+    const updates: Record<string, unknown> = {};
+
+    if (invoice.status !== status) {
+      updates.status = status;
+
+      if (status === "paid" && !invoice.paidAt) {
+        updates.paidAt = Date.now();
+      }
+      if (status === "sent" && !invoice.sentAt) {
+        updates.sentAt = Date.now();
+      }
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await ctx.db.patch(args.invoiceId, updates);
+      return { updated: true, newStatus: status };
+    }
+
+    return { updated: false, reason: "No changes" };
+  },
+});
+
+// Sync single invoice status from Xero
+export const syncInvoiceStatus = action({
+  args: {
+    userId: v.id("users"),
+    invoiceId: v.id("invoices"),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    status: v.optional(v.string()),
+    message: v.optional(v.string()),
+  }),
+  handler: async (ctx, args): Promise<{ success: boolean; status?: string; message?: string }> => {
+    // Get user and verify permissions
+    const user = await ctx.runQuery(internal.xero.getUser, { userId: args.userId });
+    if (!user || user.role !== "owner") {
+      throw new Error("Only owners can sync invoices");
+    }
+
+    // Get organization with Xero settings
+    const org = await ctx.runQuery(internal.xero.getOrganization, {
+      organizationId: user.organizationId,
+    });
+    if (!org?.settings?.xero) throw new Error("Xero not connected");
+
+    // Get invoice details
+    const invoice = await ctx.runQuery(internal.xero.getInvoiceDetails, {
+      invoiceId: args.invoiceId,
+    });
+    if (!invoice) throw new Error("Invoice not found");
+    if (!invoice.xeroInvoiceId) {
+      return { success: false, message: "Invoice not exported to Xero yet" };
+    }
+
+    // Ensure valid token
+    const { accessToken } = await ensureValidToken(ctx, org);
+    const tenantId = org.settings.xero.tenantId;
+
+    // Fetch invoice from Xero
+    const response = await xeroApiRequest(
+      `https://api.xero.com/api.xro/2.0/Invoices/${invoice.xeroInvoiceId}`,
+      "GET",
+      accessToken,
+      tenantId
+    );
+
+    if (!response.Invoices || response.Invoices.length === 0) {
+      return { success: false, message: "Invoice not found in Xero" };
+    }
+
+    const xeroInvoice = response.Invoices[0];
+
+    // Update local invoice status
+    const result = await ctx.runMutation(internal.xero.updateInvoiceFromXero, {
+      invoiceId: args.invoiceId,
+      xeroStatus: xeroInvoice.Status,
+      amountPaid: xeroInvoice.AmountPaid,
+      amountDue: xeroInvoice.AmountDue,
+    });
+
+    return {
+      success: true,
+      status: xeroInvoice.Status,
+      message: result.updated ? `Status updated to ${result.newStatus}` : "No changes needed",
+    };
+  },
+});
+
+// Sync all invoices for organization from Xero
+export const syncAllInvoices = action({
+  args: {
+    userId: v.id("users"),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    synced: v.number(),
+    updated: v.number(),
+    errors: v.number(),
+  }),
+  handler: async (ctx, args): Promise<{ success: boolean; synced: number; updated: number; errors: number }> => {
+    // Get user and verify permissions
+    const user = await ctx.runQuery(internal.xero.getUser, { userId: args.userId });
+    if (!user || user.role !== "owner") {
+      throw new Error("Only owners can sync invoices");
+    }
+
+    // Get organization with Xero settings
+    const org = await ctx.runQuery(internal.xero.getOrganization, {
+      organizationId: user.organizationId,
+    });
+    if (!org?.settings?.xero) {
+      return { success: false, synced: 0, updated: 0, errors: 0 };
+    }
+
+    // Get all invoices with Xero IDs
+    const invoices = await ctx.runQuery(internal.xero.getInvoicesWithXeroId, {
+      organizationId: user.organizationId,
+    });
+
+    if (invoices.length === 0) {
+      return { success: true, synced: 0, updated: 0, errors: 0 };
+    }
+
+    // Ensure valid token
+    const { accessToken } = await ensureValidToken(ctx, org);
+    const tenantId = org.settings.xero.tenantId;
+
+    // Build comma-separated list of Xero invoice IDs
+    const xeroIds = invoices.map(inv => inv.xeroInvoiceId).join(",");
+
+    // Fetch all invoices from Xero in one request
+    const response = await xeroApiRequest(
+      `https://api.xero.com/api.xro/2.0/Invoices?IDs=${xeroIds}`,
+      "GET",
+      accessToken,
+      tenantId
+    );
+
+    let updated = 0;
+    let errors = 0;
+
+    // Create a map for quick lookup
+    const xeroInvoiceMap = new Map<string, { Status: string; AmountPaid: number; AmountDue: number }>();
+    for (const xeroInv of response.Invoices || []) {
+      xeroInvoiceMap.set(xeroInv.InvoiceID, xeroInv);
+    }
+
+    // Update each invoice
+    for (const invoice of invoices) {
+      const xeroInvoice = xeroInvoiceMap.get(invoice.xeroInvoiceId!);
+      if (!xeroInvoice) {
+        errors++;
+        continue;
+      }
+
+      try {
+        const result = await ctx.runMutation(internal.xero.updateInvoiceFromXero, {
+          invoiceId: invoice._id,
+          xeroStatus: xeroInvoice.Status,
+          amountPaid: xeroInvoice.AmountPaid,
+          amountDue: xeroInvoice.AmountDue,
+        });
+
+        if (result.updated) {
+          updated++;
+        }
+      } catch {
+        errors++;
+      }
+    }
+
+    return {
+      success: true,
+      synced: invoices.length,
+      updated,
+      errors,
+    };
+  },
+});
+
+// Internal query to get all invoices with Xero IDs for an organization
+export const getInvoicesWithXeroId = internalQuery({
+  args: { organizationId: v.id("organizations") },
+  handler: async (ctx, args) => {
+    const invoices = await ctx.db
+      .query("invoices")
+      .withIndex("by_organization", (q) => q.eq("organizationId", args.organizationId))
+      .collect();
+
+    // Filter to only invoices with Xero IDs
+    return invoices.filter(inv => inv.xeroInvoiceId);
+  },
+});
+
+// ============================================
+// PROACTIVE TOKEN REFRESH (for cron jobs)
+// ============================================
+
+// Internal query to get all organizations with Xero connections
+export const getAllXeroConnectedOrgs = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const organizations = await ctx.db.query("organizations").collect();
+
+    // Filter to only orgs with Xero settings
+    return organizations
+      .filter((org) => org.settings?.xero?.refreshToken)
+      .map((org) => ({
+        _id: org._id,
+        name: org.name,
+        tokenExpiresAt: org.settings?.xero?.tokenExpiresAt || 0,
+        refreshToken: org.settings?.xero?.refreshToken || "",
+        tenantName: org.settings?.xero?.tenantName || "",
+      }));
+  },
+});
+
+// Internal mutation to mark Xero connection as requiring reconnection
+export const markTokenExpired = internalMutation({
+  args: { organizationId: v.id("organizations") },
+  handler: async (ctx, args) => {
+    const org = await ctx.db.get(args.organizationId);
+    if (!org?.settings?.xero) return { success: false };
+
+    // Set tokenExpiresAt to 0 to indicate expired/requires reconnection
+    await ctx.db.patch(args.organizationId, {
+      settings: {
+        ...org.settings,
+        xero: {
+          ...org.settings.xero,
+          tokenExpiresAt: 0,
+        },
+      },
+    });
+
+    return { success: true };
+  },
+});
+
+// Internal action to refresh token for a single organization (used by cron)
+// Only refreshes if token expires within 25 minutes to avoid unnecessary API calls
+const REFRESH_THRESHOLD_MS = 25 * 60 * 1000; // 25 minutes
+
+export const refreshTokenForOrg = internalAction({
+  args: { organizationId: v.id("organizations") },
+  returns: v.object({
+    success: v.boolean(),
+    skipped: v.optional(v.boolean()),
+    error: v.optional(v.string()),
+  }),
+  handler: async (ctx, args): Promise<{ success: boolean; skipped?: boolean; error?: string }> => {
+    const org = await ctx.runQuery(internal.xero.getOrganization, {
+      organizationId: args.organizationId,
+    });
+
+    if (!org?.settings?.xero?.refreshToken) {
+      return { success: false, error: "No Xero connection" };
+    }
+
+    const xero = org.settings.xero;
+
+    // Skip refresh if token still has plenty of time (more than 25 minutes)
+    if (xero.tokenExpiresAt > Date.now() + REFRESH_THRESHOLD_MS) {
+      return { success: true, skipped: true };
+    }
+
+    const clientId = process.env.XERO_CLIENT_ID;
+    const clientSecret = process.env.XERO_CLIENT_SECRET;
+
+    if (!clientId || !clientSecret) {
+      return { success: false, error: "Xero credentials not configured" };
+    }
+
+    try {
+      const response = await fetch("https://identity.xero.com/connect/token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+        },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          refresh_token: xero.refreshToken,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Xero token refresh failed for org ${args.organizationId}: ${errorText}`);
+
+        // Mark the token as expired so UI shows reconnect prompt
+        await ctx.runMutation(internal.xero.markTokenExpired, {
+          organizationId: args.organizationId,
+        });
+
+        return { success: false, error: `Token refresh failed: ${errorText}` };
+      }
+
+      const data = await response.json();
+
+      // Store new tokens
+      await ctx.runMutation(internal.xero.updateTokens, {
+        organizationId: args.organizationId,
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token,
+        expiresIn: data.expires_in,
+      });
+
+      console.log(`Xero token refreshed for org ${args.organizationId}`);
+      return { success: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      console.error(`Xero token refresh error for org ${args.organizationId}: ${message}`);
+      return { success: false, error: message };
+    }
+  },
+});
+
+// Internal action to refresh all Xero tokens (called by cron job)
+export const refreshAllXeroTokens = internalAction({
+  args: {},
+  returns: v.object({
+    processed: v.number(),
+    refreshed: v.number(),
+    skipped: v.number(),
+    failed: v.number(),
+  }),
+  handler: async (ctx): Promise<{ processed: number; refreshed: number; skipped: number; failed: number }> => {
+    const connectedOrgs = await ctx.runQuery(internal.xero.getAllXeroConnectedOrgs, {});
+
+    if (connectedOrgs.length === 0) {
+      return { processed: 0, refreshed: 0, skipped: 0, failed: 0 };
+    }
+
+    let refreshed = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const org of connectedOrgs) {
+      const result = await ctx.runAction(internal.xero.refreshTokenForOrg, {
+        organizationId: org._id,
+      });
+
+      if (result.success) {
+        if (result.skipped) {
+          skipped++;
+        } else {
+          refreshed++;
+        }
+      } else {
+        failed++;
+        console.error(`Failed to refresh token for org ${org._id} (${org.tenantName}): ${result.error}`);
+      }
+    }
+
+    // Only log if something interesting happened
+    if (refreshed > 0 || failed > 0) {
+      console.log(`Xero token refresh: ${refreshed} refreshed, ${skipped} skipped, ${failed} failed`);
+    }
+
+    return { processed: connectedOrgs.length, refreshed, skipped, failed };
   },
 });
