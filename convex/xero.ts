@@ -729,14 +729,35 @@ export const exportInvoice = action({
     // Format due date
     const dueDate = new Date(invoice.dueDate).toISOString().split("T")[0];
 
-    // Build Xero invoice
-    const xeroInvoice = {
-      Type: "ACCREC",
-      Contact: { ContactID: xeroContactId },
-      DueDate: dueDate,
-      Reference: invoice.invoiceNumber,
-      Status: "DRAFT",
-      LineItems: [
+    // Build line items based on job type
+    let lineItems: Array<{
+      Description: string;
+      Quantity: number;
+      UnitAmount: number;
+      AccountCode: string;
+    }> = [];
+
+    if (invoice.job?.jobType === "labourHire" && invoice.lineItems && invoice.lineItems.length > 0) {
+      // Labour hire: one line item per worker
+      lineItems = invoice.lineItems.map((item: { workerName: string; hours: number; rate: number }) => ({
+        Description: `${invoice.job!.name} - ${invoice.job!.siteAddress}\n${item.workerName}`,
+        Quantity: item.hours,
+        UnitAmount: item.rate,
+        AccountCode: accountCode,
+      }));
+    } else if (invoice.job?.jobType === "contract" && invoice.completionPercentage) {
+      // Contract: single line item with progress claim info
+      lineItems = [
+        {
+          Description: `${invoice.job.name} - ${invoice.job.siteAddress}\nProgress Claim: ${invoice.completionPercentage}% complete`,
+          Quantity: 1,
+          UnitAmount: invoice.amount,
+          AccountCode: accountCode,
+        },
+      ];
+    } else {
+      // Fallback: single line item (legacy invoices)
+      lineItems = [
         {
           Description: invoice.job
             ? `${invoice.job.name} - ${invoice.job.siteAddress}`
@@ -745,7 +766,17 @@ export const exportInvoice = action({
           UnitAmount: invoice.amount,
           AccountCode: accountCode,
         },
-      ],
+      ];
+    }
+
+    // Build Xero invoice
+    const xeroInvoice = {
+      Type: "ACCREC",
+      Contact: { ContactID: xeroContactId },
+      DueDate: dueDate,
+      Reference: invoice.invoiceNumber,
+      Status: "DRAFT",
+      LineItems: lineItems,
     };
 
     // Create invoice in Xero
@@ -771,6 +802,112 @@ export const exportInvoice = action({
       xeroInvoiceId: createdInvoice.InvoiceID,
       xeroInvoiceNumber: createdInvoice.InvoiceNumber,
     };
+  },
+});
+
+// System-initiated export for auto-created invoices (from timesheet approval)
+export const exportInvoiceInternal = internalAction({
+  args: {
+    invoiceId: v.id("invoices"),
+    organizationId: v.id("organizations"),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    try {
+      // Get organization with Xero settings
+      const org = await ctx.runQuery(internal.xero.getOrganization, {
+        organizationId: args.organizationId,
+      });
+      if (!org?.settings?.xero) return;
+
+      // Ensure valid token
+      const { accessToken } = await ensureValidToken(ctx, org);
+      const tenantId = org.settings.xero.tenantId;
+
+      // Get invoice with details
+      const invoice = await ctx.runQuery(internal.xero.getInvoiceDetails, {
+        invoiceId: args.invoiceId,
+      });
+      if (!invoice) return;
+      if (invoice.xeroInvoiceId) return; // Already exported
+
+      // Ensure builder has Xero contact
+      let xeroContactId = invoice.builder?.xeroContactId;
+      if (!xeroContactId) {
+        const contactResult = await ctx.runAction(internal.xero.syncContactInternal, {
+          userId: args.userId,
+          builderId: invoice.builderId,
+        });
+        xeroContactId = contactResult.xeroContactId;
+      }
+
+      // Get account code
+      const accountCodes = org.settings.xero.accountCodes;
+      const accountCode = accountCodes?.labourAccount || "200";
+
+      // Format due date
+      const dueDate = new Date(invoice.dueDate).toISOString().split("T")[0];
+
+      // Build line items (labour hire: one per worker)
+      let lineItems: Array<{
+        Description: string;
+        Quantity: number;
+        UnitAmount: number;
+        AccountCode: string;
+      }> = [];
+
+      if (invoice.lineItems && invoice.lineItems.length > 0) {
+        lineItems = invoice.lineItems.map((item: { workerName: string; hours: number; rate: number }) => ({
+          Description: `${invoice.job?.name || "Services"} - ${invoice.job?.siteAddress || ""}\n${item.workerName}`,
+          Quantity: item.hours,
+          UnitAmount: item.rate,
+          AccountCode: accountCode,
+        }));
+      } else {
+        lineItems = [
+          {
+            Description: invoice.job
+              ? `${invoice.job.name} - ${invoice.job.siteAddress}`
+              : "Services",
+            Quantity: 1,
+            UnitAmount: invoice.amount,
+            AccountCode: accountCode,
+          },
+        ];
+      }
+
+      // Build Xero invoice
+      const xeroInvoice = {
+        Type: "ACCREC",
+        Contact: { ContactID: xeroContactId },
+        DueDate: dueDate,
+        Reference: invoice.invoiceNumber,
+        Status: "DRAFT",
+        LineItems: lineItems,
+      };
+
+      // Create invoice in Xero
+      const response = await xeroApiRequest(
+        "https://api.xero.com/api.xro/2.0/Invoices",
+        "POST",
+        accessToken,
+        tenantId,
+        { Invoices: [xeroInvoice] }
+      );
+
+      const createdInvoice = response.Invoices[0];
+
+      // Update local invoice with Xero details
+      await ctx.runMutation(internal.xero.updateInvoiceXeroId, {
+        invoiceId: args.invoiceId,
+        xeroInvoiceId: createdInvoice.InvoiceID,
+        xeroInvoiceNumber: createdInvoice.InvoiceNumber,
+      });
+    } catch (error) {
+      // Log error but don't throw - invoice stays as local draft for manual retry
+      const message = error instanceof Error ? error.message : "Unknown error";
+      console.error(`Auto Xero export failed for invoice ${args.invoiceId}: ${message}`);
+    }
   },
 });
 

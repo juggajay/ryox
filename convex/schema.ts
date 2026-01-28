@@ -161,6 +161,8 @@ export default defineSchema({
     siteAddress: v.string(),
     jobType: v.union(v.literal("contract"), v.literal("labourHire")),
     supervisorId: v.optional(v.id("builderContacts")),
+    // Site manager name (free text - for labour hire jobs created by workers)
+    siteManager: v.optional(v.string()),
     quotedPrice: v.optional(v.number()),
     estimatedHours: v.optional(v.number()),
     materialsBudget: v.optional(v.number()),
@@ -178,6 +180,9 @@ export default defineSchema({
       v.literal("invoiced")
     ),
     notes: v.optional(v.string()),
+    // Track who created the job and if it was worker-created
+    createdByUserId: v.optional(v.id("users")),
+    isWorkerCreated: v.optional(v.boolean()),
     createdAt: v.number(),
   })
     .index("by_organization", ["organizationId"])
@@ -200,11 +205,45 @@ export default defineSchema({
     .index("by_job", ["jobId"])
     .index("by_worker", ["workerId"]),
 
-  // Timesheet Batches (weekly submissions)
+  // Week Submissions (unified week container - links multiple batches)
+  weekSubmissions: defineTable({
+    organizationId: v.id("organizations"),
+    workerId: v.id("workers"),
+    weekStartDate: v.number(), // Monday 00:00:00 timestamp
+    // Unified signature for the whole week
+    signatureUrl: v.optional(v.string()),
+    signatoryName: v.optional(v.string()),
+    // Photo URLs from uploaded timesheets (can have multiple)
+    photoUrls: v.optional(v.array(v.object({
+      url: v.string(),
+      jobId: v.id("jobs"),
+      daysExtracted: v.array(v.string()), // e.g., ["Monday", "Tuesday", "Wednesday"]
+    }))),
+    totalHours: v.number(),
+    totalDays: v.number(),
+    jobCount: v.number(), // Number of different jobs in this week
+    status: v.union(
+      v.literal("submitted"),
+      v.literal("approved"),
+      v.literal("partial"), // Some batches approved, some pending
+      v.literal("queried")
+    ),
+    queryNote: v.optional(v.string()),
+    submittedAt: v.number(),
+    approvedAt: v.optional(v.number()),
+    approvedBy: v.optional(v.id("users")),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_worker", ["workerId"])
+    .index("by_worker_week", ["workerId", "weekStartDate"])
+    .index("by_status", ["status"]),
+
+  // Timesheet Batches (weekly submissions per job - linked to week submission)
   timesheetBatches: defineTable({
     organizationId: v.id("organizations"),
     workerId: v.id("workers"),
     jobId: v.id("jobs"),
+    weekSubmissionId: v.optional(v.id("weekSubmissions")), // Links to unified week
     weekStartDate: v.number(), // Monday 00:00:00 timestamp
     photoUrl: v.optional(v.string()), // Storage ID of uploaded timesheet photo
     signatureUrl: v.optional(v.string()), // Storage ID of signature
@@ -223,7 +262,8 @@ export default defineSchema({
   })
     .index("by_organization", ["organizationId"])
     .index("by_worker", ["workerId"])
-    .index("by_status", ["status"]),
+    .index("by_status", ["status"])
+    .index("by_week_submission", ["weekSubmissionId"]),
 
   // Timesheets (individual daily entries)
   timesheets: defineTable({
@@ -237,6 +277,8 @@ export default defineSchema({
     breakMinutes: v.number(),
     totalHours: v.number(),
     notes: v.optional(v.string()),
+    // Track entry source for UI indicators
+    entrySource: v.optional(v.union(v.literal("photo"), v.literal("manual"))),
     signatureUrl: v.optional(v.string()),
     photoUrl: v.optional(v.string()),
     signatoryName: v.optional(v.string()),
@@ -343,7 +385,8 @@ export default defineSchema({
   })
     .index("by_organization", ["organizationId"])
     .index("by_job", ["jobId"])
-    .index("by_builder", ["builderId"]),
+    .index("by_builder", ["builderId"])
+    .index("by_job_week", ["jobId", "weekStart"]),
 
   // Chat Channels
   chatChannels: defineTable({

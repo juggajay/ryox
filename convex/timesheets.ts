@@ -1,5 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { Id } from "./_generated/dataModel";
 
 // Helper to calculate hours from time strings
 function calculateHours(
@@ -538,6 +540,11 @@ export const approveWeeklyBatch = mutation({
       });
     }
 
+    // Schedule auto-invoice creation for labour hire jobs
+    await ctx.scheduler.runAfter(0, internal.invoices.autoCreateLabourHireInvoice, {
+      batchId: args.batchId,
+    });
+
     return { success: true, count: timesheets.length };
   },
 });
@@ -731,5 +738,400 @@ export const getWeeklyBatch = query({
     timesheets.sort((a, b) => a.date - b.date);
 
     return { ...batch, worker, job, timesheets };
+  },
+});
+
+// ============================================
+// UNIFIED WEEK SUBMISSIONS
+// ============================================
+
+// Submit a unified week with multiple jobs
+export const submitUnifiedWeek = mutation({
+  args: {
+    userId: v.id("users"),
+    weekStartDate: v.number(),
+    entries: v.array(
+      v.object({
+        dayOfWeek: v.string(),
+        date: v.number(),
+        jobId: v.id("jobs"),
+        startTime: v.string(),
+        endTime: v.string(),
+        breakMinutes: v.number(),
+        notes: v.optional(v.string()),
+        entrySource: v.union(v.literal("photo"), v.literal("manual")),
+        photoUrl: v.optional(v.string()), // Photo this entry came from
+      })
+    ),
+    signatureUrl: v.optional(v.string()),
+    signatoryName: v.optional(v.string()),
+    photoUrls: v.optional(
+      v.array(
+        v.object({
+          url: v.string(),
+          jobId: v.id("jobs"),
+          daysExtracted: v.array(v.string()),
+        })
+      )
+    ),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error("User not found");
+    if (user.role !== "worker") throw new Error("Only workers can submit timesheets");
+
+    const worker = user.workerId ? await ctx.db.get(user.workerId) : null;
+    if (!worker) throw new Error("Worker profile not found");
+
+    if (args.entries.length === 0) {
+      throw new Error("No entries to submit");
+    }
+
+    // Group entries by job
+    const entriesByJob = new Map<string, typeof args.entries>();
+    for (const entry of args.entries) {
+      const jobId = entry.jobId as string;
+      if (!entriesByJob.has(jobId)) {
+        entriesByJob.set(jobId, []);
+      }
+      entriesByJob.get(jobId)!.push(entry);
+    }
+
+    // Calculate totals
+    let totalHours = 0;
+    const totalDays = args.entries.length;
+    const jobCount = entriesByJob.size;
+
+    for (const entry of args.entries) {
+      const hours = calculateHours(entry.startTime, entry.endTime, entry.breakMinutes);
+      totalHours += hours;
+    }
+
+    // Create the unified week submission
+    const weekSubmissionId = await ctx.db.insert("weekSubmissions", {
+      organizationId: user.organizationId,
+      workerId: worker._id,
+      weekStartDate: args.weekStartDate,
+      signatureUrl: args.signatureUrl,
+      signatoryName: args.signatoryName,
+      photoUrls: args.photoUrls,
+      totalHours,
+      totalDays,
+      jobCount,
+      status: "submitted",
+      submittedAt: Date.now(),
+    });
+
+    // Create timesheet batches and individual timesheets for each job
+    for (const [jobIdStr, jobEntries] of entriesByJob) {
+      const jobId = jobIdStr as Id<"jobs">;
+
+      // Verify job exists and belongs to org
+      const job = await ctx.db.get(jobId);
+      if (!job || job.organizationId !== user.organizationId) {
+        throw new Error(`Job not found: ${jobIdStr}`);
+      }
+
+      // Calculate hours for this job
+      let jobTotalHours = 0;
+      for (const entry of jobEntries) {
+        jobTotalHours += calculateHours(entry.startTime, entry.endTime, entry.breakMinutes);
+      }
+
+      // Find photo URL for this job if any
+      const jobPhotoEntry = args.photoUrls?.find((p) => p.jobId === jobId);
+
+      // Create batch for this job
+      const batchId = await ctx.db.insert("timesheetBatches", {
+        organizationId: user.organizationId,
+        workerId: worker._id,
+        jobId,
+        weekSubmissionId,
+        weekStartDate: args.weekStartDate,
+        photoUrl: jobPhotoEntry?.url,
+        signatureUrl: args.signatureUrl,
+        signatoryName: args.signatoryName,
+        totalHours: jobTotalHours,
+        status: "submitted",
+        submittedAt: Date.now(),
+      });
+
+      // Create individual timesheet entries
+      for (const entry of jobEntries) {
+        const hours = calculateHours(entry.startTime, entry.endTime, entry.breakMinutes);
+
+        await ctx.db.insert("timesheets", {
+          organizationId: user.organizationId,
+          jobId,
+          workerId: worker._id,
+          batchId,
+          date: entry.date,
+          startTime: entry.startTime,
+          endTime: entry.endTime,
+          breakMinutes: entry.breakMinutes,
+          totalHours: hours,
+          notes: entry.notes,
+          entrySource: entry.entrySource,
+          photoUrl: entry.photoUrl,
+          status: "submitted",
+          submittedAt: Date.now(),
+        });
+      }
+    }
+
+    return weekSubmissionId;
+  },
+});
+
+// Get unified week submissions for owner approval
+export const listUnifiedWeeks = query({
+  args: {
+    userId: v.id("users"),
+    status: v.optional(
+      v.union(
+        v.literal("submitted"),
+        v.literal("approved"),
+        v.literal("partial"),
+        v.literal("queried")
+      )
+    ),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) return [];
+    if (user.role !== "owner") return [];
+
+    let weeks = await ctx.db
+      .query("weekSubmissions")
+      .withIndex("by_organization", (q) =>
+        q.eq("organizationId", user.organizationId)
+      )
+      .collect();
+
+    // Filter by status
+    if (args.status) {
+      weeks = weeks.filter((w) => w.status === args.status);
+    }
+
+    // Sort by submitted date (newest first)
+    weeks.sort((a, b) => b.submittedAt - a.submittedAt);
+
+    // Enrich with worker and job details
+    const enriched = await Promise.all(
+      weeks.map(async (week) => {
+        const worker = await ctx.db.get(week.workerId);
+
+        // Get all batches for this week
+        const batches = await ctx.db
+          .query("timesheetBatches")
+          .withIndex("by_week_submission", (q) =>
+            q.eq("weekSubmissionId", week._id)
+          )
+          .collect();
+
+        // Get job details for each batch
+        const jobBreakdowns = await Promise.all(
+          batches.map(async (batch) => {
+            const job = await ctx.db.get(batch.jobId);
+            const builder = job ? await ctx.db.get(job.builderId) : null;
+
+            // Get individual timesheets for this batch
+            const timesheets = await ctx.db
+              .query("timesheets")
+              .withIndex("by_batch", (q) => q.eq("batchId", batch._id))
+              .collect();
+
+            return {
+              batchId: batch._id,
+              jobId: batch.jobId,
+              jobName: job?.name || "Unknown",
+              jobType: job?.jobType || "labourHire",
+              siteAddress: job?.siteAddress || "",
+              builderName: builder?.companyName || "Unknown",
+              hours: batch.totalHours,
+              days: timesheets.length,
+              status: batch.status,
+              timesheets: timesheets.sort((a, b) => a.date - b.date),
+            };
+          })
+        );
+
+        return {
+          ...week,
+          worker: worker ? { _id: worker._id, name: worker.name } : null,
+          jobBreakdowns,
+        };
+      })
+    );
+
+    return enriched;
+  },
+});
+
+// Approve entire unified week (all batches)
+export const approveUnifiedWeek = mutation({
+  args: {
+    userId: v.id("users"),
+    weekSubmissionId: v.id("weekSubmissions"),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error("User not found");
+    if (user.role !== "owner") throw new Error("Only owners can approve timesheets");
+
+    const week = await ctx.db.get(args.weekSubmissionId);
+    if (!week) throw new Error("Week submission not found");
+    if (week.organizationId !== user.organizationId) throw new Error("Unauthorized");
+
+    // Get all batches for this week
+    const batches = await ctx.db
+      .query("timesheetBatches")
+      .withIndex("by_week_submission", (q) =>
+        q.eq("weekSubmissionId", args.weekSubmissionId)
+      )
+      .collect();
+
+    // Approve all batches and their timesheets
+    for (const batch of batches) {
+      await ctx.db.patch(batch._id, {
+        status: "approved",
+        approvedAt: Date.now(),
+        approvedBy: user._id,
+      });
+
+      // Approve individual timesheets
+      const timesheets = await ctx.db
+        .query("timesheets")
+        .withIndex("by_batch", (q) => q.eq("batchId", batch._id))
+        .collect();
+
+      for (const ts of timesheets) {
+        await ctx.db.patch(ts._id, {
+          status: "approved",
+          approvedAt: Date.now(),
+          approvedBy: user._id,
+        });
+      }
+    }
+
+    // Update week submission status
+    await ctx.db.patch(args.weekSubmissionId, {
+      status: "approved",
+      approvedAt: Date.now(),
+      approvedBy: user._id,
+    });
+
+    // Schedule auto-invoice creation for each labour hire batch
+    for (const batch of batches) {
+      await ctx.scheduler.runAfter(0, internal.invoices.autoCreateLabourHireInvoice, {
+        batchId: batch._id,
+      });
+    }
+
+    return { success: true };
+  },
+});
+
+// Query unified week (send back for corrections)
+export const queryUnifiedWeek = mutation({
+  args: {
+    userId: v.id("users"),
+    weekSubmissionId: v.id("weekSubmissions"),
+    queryNote: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error("User not found");
+    if (user.role !== "owner") throw new Error("Only owners can query timesheets");
+
+    const week = await ctx.db.get(args.weekSubmissionId);
+    if (!week) throw new Error("Week submission not found");
+    if (week.organizationId !== user.organizationId) throw new Error("Unauthorized");
+
+    // Get all batches and mark as queried
+    const batches = await ctx.db
+      .query("timesheetBatches")
+      .withIndex("by_week_submission", (q) =>
+        q.eq("weekSubmissionId", args.weekSubmissionId)
+      )
+      .collect();
+
+    for (const batch of batches) {
+      await ctx.db.patch(batch._id, {
+        status: "queried",
+        queryNote: args.queryNote,
+      });
+    }
+
+    // Update week submission
+    await ctx.db.patch(args.weekSubmissionId, {
+      status: "queried",
+      queryNote: args.queryNote,
+    });
+
+    return { success: true };
+  },
+});
+
+// Get worker's draft week (to show what's already entered)
+export const getWorkerDraftWeek = query({
+  args: {
+    userId: v.id("users"),
+    weekStartDate: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user || !user.workerId) return null;
+
+    // Check if there's already a submission for this week
+    const existingWeek = await ctx.db
+      .query("weekSubmissions")
+      .withIndex("by_worker_week", (q) =>
+        q.eq("workerId", user.workerId!).eq("weekStartDate", args.weekStartDate)
+      )
+      .first();
+
+    if (existingWeek) {
+      // Get batches and timesheets
+      const batches = await ctx.db
+        .query("timesheetBatches")
+        .withIndex("by_week_submission", (q) =>
+          q.eq("weekSubmissionId", existingWeek._id)
+        )
+        .collect();
+
+      const entries = [];
+      for (const batch of batches) {
+        const job = await ctx.db.get(batch.jobId);
+        const builder = job ? await ctx.db.get(job.builderId) : null;
+
+        const timesheets = await ctx.db
+          .query("timesheets")
+          .withIndex("by_batch", (q) => q.eq("batchId", batch._id))
+          .collect();
+
+        for (const ts of timesheets) {
+          entries.push({
+            date: ts.date,
+            jobId: ts.jobId,
+            jobName: job?.name || "",
+            builderName: builder?.companyName || "",
+            startTime: ts.startTime,
+            endTime: ts.endTime,
+            breakMinutes: ts.breakMinutes,
+            totalHours: ts.totalHours,
+            entrySource: ts.entrySource || "manual",
+          });
+        }
+      }
+
+      return {
+        weekSubmissionId: existingWeek._id,
+        status: existingWeek.status,
+        entries: entries.sort((a, b) => a.date - b.date),
+      };
+    }
+
+    return null;
   },
 });
